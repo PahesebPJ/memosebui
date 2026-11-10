@@ -1,0 +1,18 @@
+# Node & Build artifacts
+node_modules
+node_modules/
+dist/
+
+# Rust & Tauri
+src-tauri/target/
+
+# Local worktrees & storage
+.worktrees/
+.seb-vault/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
