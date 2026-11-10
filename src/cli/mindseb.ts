@@ -7,7 +7,11 @@ import {
   stopMindsebDaemon,
   unregisterMindsebNode,
 } from './setup.ts'
-import { startUiServer } from './ui-server.ts'
+import {
+  isMindsebServerRunning,
+  launchStandaloneDesktopWindow,
+  startUiServer,
+} from './ui-server.ts'
 import { BUNDLE_ID, VERSION } from '../version.ts'
 
 function printHelp(): void {
@@ -155,10 +159,45 @@ async function main(): Promise<void> {
     return
   }
 
-  if (!firstArg || firstArg === 'ui' || firstArg === 'watch') {
+  if (!firstArg || firstArg === 'ui') {
     const useBrowser = args.includes('--browser')
-    const openWindow =
-      args.includes('--open') || (firstArg === 'ui' && !useBrowser)
+    const daemon = await startMindsebDaemon(port)
+    const targetUrl = initialProject
+      ? `${daemon.url}/?project=${encodeURIComponent(initialProject)}`
+      : daemon.url
+
+    launchStandaloneDesktopWindow(targetUrl, useBrowser)
+
+    if (daemon.started) {
+      console.log(
+        `🚀 Daemon de mindseb iniciado (PID ${daemon.pid}) y ventana abierta en ${targetUrl}`
+      )
+    } else {
+      console.log(
+        `✨ Conectado al daemon activo en ${daemon.url} — abriendo ventana de escritorio (${targetUrl})`
+      )
+    }
+    return
+  }
+
+  if (firstArg === 'watch') {
+    const useBrowser = args.includes('--browser')
+    const openWindow = args.includes('--open')
+    const alreadyRunning = await isMindsebServerRunning(port)
+
+    if (alreadyRunning) {
+      const targetUrl = initialProject
+        ? `http://127.0.0.1:${port}/?project=${encodeURIComponent(initialProject)}`
+        : `http://127.0.0.1:${port}`
+      if (openWindow || useBrowser) {
+        launchStandaloneDesktopWindow(targetUrl, useBrowser)
+      }
+      console.log(
+        `ℹ️ El servidor de mindseb ya está activo en http://127.0.0.1:${port}`
+      )
+      return
+    }
+
     console.log(
       `\n🚀 Iniciando mindseb Visor Neuronal en http://127.0.0.1:${port}`
     )

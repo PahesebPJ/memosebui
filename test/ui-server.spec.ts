@@ -8,7 +8,10 @@ import {
   registerMindsebNode,
   unregisterMindsebNode,
 } from '../src/cli/setup.ts'
-import { startUiServer } from '../src/cli/ui-server.ts'
+import {
+  isMindsebServerRunning,
+  startUiServer,
+} from '../src/cli/ui-server.ts'
 
 describe('UI Server & Hubseb Topology Registration', () => {
   it('registers and unregisters mindseb in hubseb topology.json', async () => {
@@ -103,9 +106,10 @@ describe('UI Server & Hubseb Topology Registration', () => {
       }
       assert.equal(putData.memory.title, 'Updated Node Animations')
 
-      // 6. P2P endpoint
+      // 6. P2P endpoint & active server detection (prevents EADDRINUSE on mindseb ui)
       const p2pRes = await fetch(`${instance.url}/api/p2p`)
       assert.equal(p2pRes.status, 200)
+      assert.equal(await isMindsebServerRunning(instance.port), true)
 
       // 7. Delete via DELETE /api/memories/:id
       const delRes = await fetch(
@@ -116,5 +120,6 @@ describe('UI Server & Hubseb Topology Registration', () => {
     } finally {
       await instance.close()
     }
+    assert.equal(await isMindsebServerRunning(instance.port), false)
   })
 })
