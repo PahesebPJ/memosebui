@@ -82,7 +82,7 @@ describe('VaultBridge & Embedder', () => {
   })
 
   it('analyzes a repository directory and synthesizes architecture, convention and domain memories', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindseb-analyze-'))
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memosebui-analyze-'))
     fs.writeFileSync(
       path.join(tmpDir, 'package.json'),
       JSON.stringify({
