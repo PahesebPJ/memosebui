@@ -1074,7 +1074,8 @@ export class VaultBridge {
     const listenHost = meta.get('node.listen_host')?.trim() || '0.0.0.0'
     const rawPort = Number(meta.get('node.listen_port'))
     const listenPort = Number.isInteger(rawPort) && rawPort > 0 ? rawPort : 7432
-    const authToken = meta.get('node.auth_token')?.trim() || null
+    const hasToken = Boolean(meta.get('node.auth_token')?.trim())
+    const authToken = hasToken ? '***redacted***' : null
     const autoSync = meta.get('node.auto_sync') !== 'false'
     const lanDiscovery = meta.get('node.lan_discovery') !== 'false'
     const unassignedGroupPolicy: UnassignedGroupPolicy =

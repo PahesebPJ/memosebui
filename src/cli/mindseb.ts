@@ -168,6 +168,12 @@ async function main(): Promise<void> {
       openWindow,
       openBrowser: useBrowser,
     })
+    const shutdown = async () => {
+      await instance.close()
+      process.exit(0)
+    }
+    process.once('SIGINT', shutdown)
+    process.once('SIGTERM', shutdown)
     console.log(
       `✨ Grafo de memoria activo en ${instance.url} (Presiona Ctrl+C para salir)\n`
     )
