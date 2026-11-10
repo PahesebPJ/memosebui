@@ -17,7 +17,7 @@ describe('GraphBuilder', () => {
     })
 
     const m2 = bridge.createMemory({
-      projectId: 'mindseb',
+      projectId: 'memosebui',
       category: 'architecture',
       title: 'SQLite Vector Graph Bridge',
       content: 'Reads Float32Array vectors and SQLite FTS5 tables to render semantic similarity edges.',

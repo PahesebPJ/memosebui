@@ -4,32 +4,32 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
 import {
-  isMindsebRegistered,
-  registerMindsebNode,
-  unregisterMindsebNode,
+  isMemosebuiRegistered,
+  registerMemosebuiNode,
+  unregisterMemosebuiNode,
 } from '../src/cli/setup.ts'
 import {
-  isMindsebServerRunning,
+  isMemosebuiServerRunning,
   startUiServer,
 } from '../src/cli/ui-server.ts'
 
 describe('UI Server & Hubseb Topology Registration', () => {
-  it('registers and unregisters mindseb in hubseb topology.json', async () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindseb-topo-'))
+  it('registers and unregisters memosebui in hubseb topology.json', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memosebui-topo-'))
     const topologyPath = path.join(tmpDir, 'topology.json')
 
-    assert.equal(await isMindsebRegistered({ topologyPath }), false)
+    assert.equal(await isMemosebuiRegistered({ topologyPath }), false)
 
-    const reg = await registerMindsebNode({ topologyPath })
+    const reg = await registerMemosebuiNode({ topologyPath })
     assert.equal(reg.success, true)
-    assert.equal(reg.node.id, 'mindseb')
-    assert.ok(reg.node.provides.includes('ui.mind'))
+    assert.equal(reg.node.id, 'memosebui')
+    assert.ok(reg.node.provides.includes('ui.memoseb'))
     assert.ok(reg.node.consumes.includes('memory.vault'))
-    assert.equal(await isMindsebRegistered({ topologyPath }), true)
+    assert.equal(await isMemosebuiRegistered({ topologyPath }), true)
 
-    const unreg = await unregisterMindsebNode({ topologyPath })
+    const unreg = await unregisterMemosebuiNode({ topologyPath })
     assert.equal(unreg.removed, true)
-    assert.equal(await isMindsebRegistered({ topologyPath }), false)
+    assert.equal(await isMemosebuiRegistered({ topologyPath }), false)
 
     fs.rmSync(tmpDir, { recursive: true, force: true })
   })
@@ -46,7 +46,7 @@ describe('UI Server & Hubseb Topology Registration', () => {
       const htmlRes = await fetch(`${instance.url}/`)
       assert.equal(htmlRes.status, 200)
       const html = await htmlRes.text()
-      assert.ok(html.includes('mindseb'))
+      assert.ok(html.includes('memosebui'))
 
       const cssRes = await fetch(`${instance.url}/styles/mind.css`)
       assert.equal(cssRes.status, 200)
@@ -56,7 +56,7 @@ describe('UI Server & Hubseb Topology Registration', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectId: 'mindseb',
+          projectId: 'memosebui',
           category: 'architecture',
           title: 'Interactive Node Animations',
           content: 'Synaptic particles and breathing halos rendered on HTML5 Canvas.',
@@ -106,10 +106,10 @@ describe('UI Server & Hubseb Topology Registration', () => {
       }
       assert.equal(putData.memory.title, 'Updated Node Animations')
 
-      // 6. P2P endpoint & active server detection (prevents EADDRINUSE on mindseb ui)
+      // 6. P2P endpoint & active server detection (prevents EADDRINUSE on memosebui ui)
       const p2pRes = await fetch(`${instance.url}/api/p2p`)
       assert.equal(p2pRes.status, 200)
-      assert.equal(await isMindsebServerRunning(instance.port), true)
+      assert.equal(await isMemosebuiServerRunning(instance.port), true)
 
       // 7. Delete via DELETE /api/memories/:id
       const delRes = await fetch(
@@ -120,6 +120,6 @@ describe('UI Server & Hubseb Topology Registration', () => {
     } finally {
       await instance.close()
     }
-    assert.equal(await isMindsebServerRunning(instance.port), false)
+    assert.equal(await isMemosebuiServerRunning(instance.port), false)
   })
 })

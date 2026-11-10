@@ -1,9 +1,9 @@
 {
-  "name": "mindseb",
+  "name": "memosebui",
   "version": "0.1.0",
   "description": "Interactive force-directed memory graph and desktop interface for memoseb within the *seb ecosystem",
   "keywords": [
-    "mindseb",
+    "memosebui",
     "memoseb",
     "hubseb",
     "crewseb",
@@ -14,13 +14,13 @@
   ],
   "license": "MIT",
   "author": "PahesebPJ",
-  "homepage": "https://github.com/PahesebPJ/mindseb#readme",
+  "homepage": "https://github.com/PahesebPJ/memosebui#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/PahesebPJ/mindseb.git"
+    "url": "git+https://github.com/PahesebPJ/memosebui.git"
   },
   "bugs": {
-    "url": "https://github.com/PahesebPJ/mindseb/issues"
+    "url": "https://github.com/PahesebPJ/memosebui/issues"
   },
   "type": "module",
   "engines": {
@@ -36,7 +36,7 @@
     }
   },
   "bin": {
-    "mindseb": "./dist/cli/mindseb.js"
+    "memosebui": "./dist/cli/memosebui.js"
   },
   "files": [
     "dist",
@@ -45,12 +45,12 @@
     "AGENT_INSTALL.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"if (fs.existsSync('dist/cli/mindseb.js')) fs.chmodSync('dist/cli/mindseb.js', 0o755)\"",
+    "build": "tsc -p tsconfig.build.json && node -e \"if (fs.existsSync('dist/cli/memosebui.js')) fs.chmodSync('dist/cli/memosebui.js', 0o755)\"",
     "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node --test \"test/**/*.spec.ts\"",
-    "mindseb": "node src/cli/mindseb.ts",
-    "ui": "node src/cli/mindseb.ts ui"
+    "memosebui": "node src/cli/memosebui.ts",
+    "ui": "node src/cli/memosebui.ts ui"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

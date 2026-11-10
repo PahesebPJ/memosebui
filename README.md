@@ -1,4 +1,4 @@
-# 🧠 `mindseb` — Visor Neuronal e Interfaz de Escritorio para `memoseb`
+# 🧠 `memosebui` — Visor Neuronal e Interfaz de Escritorio para `memoseb`
 
 Interfaz gráfica de escritorio multiplataforma (**Linux, macOS y Windows**) ultraligera para explorar, buscar y gestionar visualmente los nodos de conocimiento almacenados en [`memoseb`](https://github.com/PahesebPJ/memoseb) dentro del ecosistema `*seb` ([`hubseb`](https://github.com/PahesebPJ/hubseb), [`crewseb`](https://github.com/PahesebPJ/crewseb), [`deckseb`](https://github.com/PahesebPJ/deckseb)).
 
@@ -18,12 +18,12 @@ Interfaz gráfica de escritorio multiplataforma (**Linux, macOS y Windows**) ult
 ## 🚀 Uso Rápido
 
 ```bash
-# Registrar mindseb en la topología de hubseb y arrancar el daemon (:4322)
-mindseb setup
+# Registrar memosebui en la topología de hubseb y arrancar el daemon (:4322)
+memosebui setup
 
 # Abrir la ventana dedicada de escritorio con el grafo neuronal
-mindseb ui
+memosebui ui
 
 # Consultar estado y conexión con vault.sqlite
-mindseb status
+memosebui status
 ```

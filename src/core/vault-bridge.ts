@@ -615,7 +615,7 @@ export class VaultBridge {
     )
     const tagsJson = JSON.stringify(tags)
     const tagsText = tags.join(' ')
-    const sourceAgent = input.sourceAgent?.trim() || 'mindseb-ui'
+    const sourceAgent = input.sourceAgent?.trim() || 'memosebui'
     const importance = clampImportance(input.importance)
     const now = new Date().toISOString()
 
@@ -1021,7 +1021,7 @@ export class VaultBridge {
         content: draft.content,
         tags: draft.tags,
         importance: draft.importance,
-        sourceAgent: 'mindseb-analyzer',
+        sourceAgent: 'memosebui-analyzer',
       })
       stored.push(res.memory)
     }

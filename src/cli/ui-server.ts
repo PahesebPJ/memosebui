@@ -65,7 +65,7 @@ function spawnDetached(command: string, args: string[]): boolean {
   }
 }
 
-export async function isMindsebServerRunning(
+export async function isMemosebuiServerRunning(
   port: number,
   host = '127.0.0.1'
 ): Promise<boolean> {
@@ -99,7 +99,7 @@ export function launchStandaloneDesktopWindow(
   const appArgs = [
     `--app=${url}`,
     '--window-size=1360,860',
-    '--class=mindseb',
+    '--class=memosebui',
   ]
 
   if (process.platform === 'linux') {
@@ -109,7 +109,7 @@ export function launchStandaloneDesktopWindow(
         spawnDetached(omarchyWebapp, [
           url,
           '--window-size=1360,860',
-          '--class=mindseb',
+          '--class=memosebui',
         ])
       ) {
         return
@@ -164,13 +164,13 @@ export function launchStandaloneDesktopWindow(
   spawnDetached('xdg-open', [url])
 }
 
-export function generateMindUiHtml(initialProject = 'all'): string {
+export function generateMemosebUiHtml(initialProject = 'all'): string {
   return `<!DOCTYPE html>
 <html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>mindseb — Visor Neuronal de Memoria para memoseb</title>
+  <title>memosebui — Visor Neuronal de Memoria para memoseb</title>
   <link rel="stylesheet" href="/styles/mind.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
 </head>
@@ -183,7 +183,7 @@ export function generateMindUiHtml(initialProject = 'all'): string {
           <span class="traffic-light minimize" title="Minimizar"></span>
           <span class="traffic-light maximize" title="Maximizar"></span>
         </div>
-        <span class="brand-badge">🧠 mindseb</span>
+        <span class="brand-badge">🧠 memosebui</span>
         <span id="liveIndicator" class="live-indicator">
           <span id="liveDot" class="live-dot"></span>
           <span id="liveText">Conectando…</span>
@@ -392,12 +392,12 @@ export function generateMindUiHtml(initialProject = 'all'): string {
 
       // Theme
       function initTheme() {
-        const saved = localStorage.getItem('mindseb-theme') || 'dark';
+        const saved = localStorage.getItem('memosebui-theme') || 'dark';
         applyTheme(saved);
       }
       function applyTheme(theme) {
         document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('mindseb-theme', theme);
+        localStorage.setItem('memosebui-theme', theme);
         const icon = document.getElementById('themeIcon');
         if (icon) icon.textContent = theme === 'dark' ? '☀️' : '🌙';
       }
@@ -1121,7 +1121,7 @@ export function generateMindUiHtml(initialProject = 'all'): string {
       function openMemoryModal(mem) {
         document.getElementById('modalTitle').textContent = mem ? 'Editar Recuerdo' : 'Nuevo Recuerdo en memoseb';
         document.getElementById('editMemoryId').value = mem ? mem.id : '';
-        document.getElementById('memProjectInput').value = mem ? mem.projectId : (currentProject !== 'all' ? currentProject : 'mindseb');
+        document.getElementById('memProjectInput').value = mem ? mem.projectId : (currentProject !== 'all' ? currentProject : 'memosebui');
         document.getElementById('memCategoryInput').value = mem ? mem.category : 'architecture';
         document.getElementById('memTitleInput').value = mem ? mem.title : '';
         document.getElementById('memContentInput').value = mem ? mem.content : '';
@@ -1289,7 +1289,7 @@ export async function startUiServer(
       const method = req.method ?? 'GET'
 
       if (method === 'GET' && pathname === '/') {
-        const html = generateMindUiHtml(options?.initialProject ?? 'all')
+        const html = generateMemosebUiHtml(options?.initialProject ?? 'all')
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
         res.end(html)
         return
