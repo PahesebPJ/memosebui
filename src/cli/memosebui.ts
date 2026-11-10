@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 import {
   getDefaultTopologyPath,
-  isMindsebRegistered,
-  registerMindsebNode,
-  startMindsebDaemon,
-  stopMindsebDaemon,
-  unregisterMindsebNode,
+  isMemosebuiRegistered,
+  registerMemosebuiNode,
+  startMemosebuiDaemon,
+  stopMemosebuiDaemon,
+  unregisterMemosebuiNode,
 } from './setup.ts'
 import {
-  isMindsebServerRunning,
+  isMemosebuiServerRunning,
   launchStandaloneDesktopWindow,
   startUiServer,
 } from './ui-server.ts'
@@ -19,28 +19,28 @@ function printHelp(): void {
 🧠 ${BUNDLE_ID} v${VERSION} — Visor Neuronal e Interfaz de Escritorio para memoseb
 
 Uso:
-  mindseb [ui|watch] [--port 4322] [--project <id>] [--open] [--browser] [--daemon]
+  memosebui [ui|watch] [--port 4322] [--project <id>] [--open] [--browser] [--daemon]
       Inicia la interfaz interactiva de nodos para memoseb y actualiza el grafo en tiempo real vía SSE.
 
-  mindseb daemon [--port 4322]
-      Arranca el servidor de mindseb como daemon desacoplado en segundo plano.
+  memosebui daemon [--port 4322]
+      Arranca el servidor de memosebui como daemon desacoplado en segundo plano.
 
-  mindseb stop
-      Detiene el daemon de mindseb si está en ejecución.
+  memosebui stop
+      Detiene el daemon de memosebui si está en ejecución.
 
-  mindseb status [--json]
+  memosebui status [--json]
       Muestra el estado del visor, métricas de vault.sqlite y registro en hubseb.
 
-  mindseb setup [--no-daemon]
-      Registra mindseb en hubseb topology.json y arranca el daemon en segundo plano.
+  memosebui setup [--no-daemon]
+      Registra memosebui en hubseb topology.json y arranca el daemon en segundo plano.
 
-  mindseb purge
-      Detiene el daemon de mindseb y lo elimina de la topología de hubseb.
+  memosebui purge
+      Detiene el daemon de memosebui y lo elimina de la topología de hubseb.
 
-  mindseb --version, -v
-      Muestra la versión de mindseb.
+  memosebui --version, -v
+      Muestra la versión de memosebui.
 
-  mindseb --help, -h
+  memosebui --help, -h
       Muestra esta ayuda.
 `)
 }
@@ -63,7 +63,7 @@ function extractProject(args: string[]): string | undefined {
 }
 
 async function handleStatus(jsonMode: boolean, port: number): Promise<void> {
-  const registered = await isMindsebRegistered()
+  const registered = await isMemosebuiRegistered()
   let serverActive = false
   let memoryCount = 0
   let projectCount = 0
@@ -106,7 +106,7 @@ async function handleStatus(jsonMode: boolean, port: number): Promise<void> {
     return
   }
 
-  console.log(`\n🧠 mindseb v${VERSION} — Estado del Visor Neuronal:`)
+  console.log(`\n🧠 memosebui v${VERSION} — Estado del Visor Neuronal:`)
   console.log(`  • Registrado en hubseb:     ${registered ? '✅ SÍ' : '❌ NO'}`)
   console.log(
     `  • Servidor Visor (:${port}):    ${
@@ -140,28 +140,28 @@ async function main(): Promise<void> {
     ((!firstArg || firstArg === 'watch' || firstArg === 'ui') &&
       args.includes('--daemon'))
   ) {
-    const result = await startMindsebDaemon(port)
+    const result = await startMemosebuiDaemon(port)
     if (result.started) {
-      console.log(`🧠 Daemon de mindseb iniciado (PID ${result.pid}) en ${result.url}`)
+      console.log(`🧠 Daemon de memosebui iniciado (PID ${result.pid}) en ${result.url}`)
     } else {
-      console.log(`🧠 Daemon de mindseb ya está activo en ${result.url}`)
+      console.log(`🧠 Daemon de memosebui ya está activo en ${result.url}`)
     }
     return
   }
 
   if (firstArg === 'stop') {
-    const stopped = await stopMindsebDaemon()
+    const stopped = await stopMemosebuiDaemon()
     if (stopped) {
-      console.log(`🛑 Daemon de mindseb detenido`)
+      console.log(`🛑 Daemon de memosebui detenido`)
     } else {
-      console.log(`ℹ️ No se encontró ningún daemon de mindseb en ejecución`)
+      console.log(`ℹ️ No se encontró ningún daemon de memosebui en ejecución`)
     }
     return
   }
 
   if (!firstArg || firstArg === 'ui') {
     const useBrowser = args.includes('--browser')
-    const daemon = await startMindsebDaemon(port)
+    const daemon = await startMemosebuiDaemon(port)
     const targetUrl = initialProject
       ? `${daemon.url}/?project=${encodeURIComponent(initialProject)}`
       : daemon.url
@@ -170,7 +170,7 @@ async function main(): Promise<void> {
 
     if (daemon.started) {
       console.log(
-        `🚀 Daemon de mindseb iniciado (PID ${daemon.pid}) y ventana abierta en ${targetUrl}`
+        `🚀 Daemon de memosebui iniciado (PID ${daemon.pid}) y ventana abierta en ${targetUrl}`
       )
     } else {
       console.log(
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   if (firstArg === 'watch') {
     const useBrowser = args.includes('--browser')
     const openWindow = args.includes('--open')
-    const alreadyRunning = await isMindsebServerRunning(port)
+    const alreadyRunning = await isMemosebuiServerRunning(port)
 
     if (alreadyRunning) {
       const targetUrl = initialProject
@@ -193,13 +193,13 @@ async function main(): Promise<void> {
         launchStandaloneDesktopWindow(targetUrl, useBrowser)
       }
       console.log(
-        `ℹ️ El servidor de mindseb ya está activo en http://127.0.0.1:${port}`
+        `ℹ️ El servidor de memosebui ya está activo en http://127.0.0.1:${port}`
       )
       return
     }
 
     console.log(
-      `\n🚀 Iniciando mindseb Visor Neuronal en http://127.0.0.1:${port}`
+      `\n🚀 Iniciando memosebui Visor Neuronal en http://127.0.0.1:${port}`
     )
     const instance = await startUiServer({
       port,
@@ -225,10 +225,10 @@ async function main(): Promise<void> {
       break
     }
     case 'setup': {
-      const outcome = await registerMindsebNode()
+      const outcome = await registerMemosebuiNode()
       console.log(`✅ ${BUNDLE_ID} registrado en ${outcome.topologyFile}`)
       if (!args.includes('--no-daemon')) {
-        const daemon = await startMindsebDaemon(port)
+        const daemon = await startMemosebuiDaemon(port)
         if (daemon.started) {
           console.log(
             `🚀 Daemon activo sincronizando grafo en ${daemon.url} (PID: ${daemon.pid})`
@@ -240,8 +240,8 @@ async function main(): Promise<void> {
       break
     }
     case 'purge': {
-      await stopMindsebDaemon()
-      const outcome = await unregisterMindsebNode()
+      await stopMemosebuiDaemon()
+      const outcome = await unregisterMemosebuiNode()
       if (outcome.removed) {
         console.log(`🧹 ${BUNDLE_ID} eliminado de ${outcome.topologyFile}`)
       } else {

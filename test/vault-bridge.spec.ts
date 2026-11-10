@@ -26,8 +26,8 @@ describe('VaultBridge & Embedder', () => {
     const bridge = new VaultBridge({ dbPath: ':memory:' })
 
     const created1 = bridge.createMemory({
-      projectId: 'mindseb',
-      projectName: 'mindseb',
+      projectId: 'memosebui',
+      projectName: 'memosebui',
       category: 'architecture',
       title: 'Force-Directed Canvas Engine',
       content: 'Uses Verlet velocity integration and Coulomb repulsion at 60fps.',
@@ -35,11 +35,11 @@ describe('VaultBridge & Embedder', () => {
       importance: 0.95,
     })
     assert.equal(created1.created, true)
-    assert.equal(created1.memory.projectId, 'mindseb')
+    assert.equal(created1.memory.projectId, 'memosebui')
 
     const created2 = bridge.createMemory({
-      projectId: 'mindseb',
-      projectName: 'mindseb',
+      projectId: 'memosebui',
+      projectName: 'memosebui',
       category: 'convention',
       title: 'Conventional Commits and Worktrees',
       content: 'All changes run in isolated git worktrees using conventional commits.',
@@ -55,7 +55,7 @@ describe('VaultBridge & Embedder', () => {
 
     // Hybrid search
     const searchRes = bridge.searchMemories('Verlet physics canvas repulsion', {
-      projectId: 'mindseb',
+      projectId: 'memosebui',
     })
     assert.ok(searchRes.memories.length >= 1)
     assert.equal(searchRes.memories[0]!.id, created1.memory.id)
@@ -82,7 +82,7 @@ describe('VaultBridge & Embedder', () => {
   })
 
   it('analyzes a repository directory and synthesizes architecture, convention and domain memories', () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mindseb-analyze-'))
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'memosebui-analyze-'))
     fs.writeFileSync(
       path.join(tmpDir, 'package.json'),
       JSON.stringify({

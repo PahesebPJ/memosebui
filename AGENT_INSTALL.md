@@ -1,6 +1,6 @@
-# Instalación de `mindseb` para Agentes
+# Instalación de `memosebui` para Agentes
 
 ```bash
 npm install && npm run build
-node dist/cli/mindseb.js setup
+node dist/cli/memosebui.js setup
 ```

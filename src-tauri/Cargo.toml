@@ -1,17 +1,17 @@
 [package]
-name = "mindseb-backend"
+name = "memosebui-backend"
 version = "0.1.0"
-description = "Native desktop backend and graph IPC router for mindseb"
+description = "Native desktop backend and graph IPC router for memosebui"
 authors = ["PahesebPJ"]
 edition = "2021"
 license = "MIT"
 
 [lib]
-name = "mindseb_lib"
+name = "memosebui_lib"
 path = "src/lib.rs"
 
 [[bin]]
-name = "mindseb-backend"
+name = "memosebui-backend"
 path = "src/main.rs"
 
 [dependencies]
