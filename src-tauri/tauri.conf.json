@@ -1,0 +1,26 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
+  "productName": "mindseb",
+  "version": "0.1.0",
+  "identifier": "com.paheseb.mindseb",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://127.0.0.1:4322",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "mindseb — Visor Neuronal de Memoria para memoseb",
+        "width": 1360,
+        "height": 860,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  }
+}

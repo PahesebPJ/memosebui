@@ -1,0 +1,59 @@
+{
+  "name": "mindseb",
+  "version": "0.1.0",
+  "description": "Interactive force-directed memory graph and desktop interface for memoseb within the *seb ecosystem",
+  "keywords": [
+    "mindseb",
+    "memoseb",
+    "hubseb",
+    "crewseb",
+    "deckseb",
+    "knowledge-graph",
+    "vector-memory",
+    "tauri"
+  ],
+  "license": "MIT",
+  "author": "PahesebPJ",
+  "homepage": "https://github.com/PahesebPJ/mindseb#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PahesebPJ/mindseb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/PahesebPJ/mindseb/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "mindseb": "./dist/cli/mindseb.js"
+  },
+  "files": [
+    "dist",
+    "src/styles",
+    "README.md",
+    "AGENT_INSTALL.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node -e \"if (fs.existsSync('dist/cli/mindseb.js')) fs.chmodSync('dist/cli/mindseb.js', 0o755)\"",
+    "prepack": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.spec.ts\"",
+    "mindseb": "node src/cli/mindseb.ts",
+    "ui": "node src/cli/mindseb.ts ui"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.2"
+  }
+}
