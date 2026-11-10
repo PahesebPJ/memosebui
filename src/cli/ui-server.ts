@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { buildMindGraph } from '../core/graph-builder.ts'
@@ -38,7 +38,7 @@ function findExecutableInPath(binName: string): string | null {
     for (const ext of extensions) {
       const candidate = path.join(dir, `${binName}${ext}`)
       try {
-        if (existsSync(candidate)) {
+        if (existsSync(candidate) && statSync(candidate).isFile()) {
           accessSync(candidate, constants.X_OK)
           return candidate
         }
