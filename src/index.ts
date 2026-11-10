@@ -1,0 +1,7 @@
+export * from './cli/setup.ts'
+export * from './cli/ui-server.ts'
+export * from './core/graph-builder.ts'
+export * from './core/vault-bridge.ts'
+export * from './core/vault-watcher.ts'
+export * from './types/mind.ts'
+export { BUNDLE_ID, PACKAGE_ROOT, VERSION } from './version.ts'

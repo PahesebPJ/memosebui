@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "sourceMap": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/types/**/*.ts",
+    "src/core/**/*.ts",
+    "src/cli/**/*.ts",
+    "src/version.ts",
+    "src/index.ts"
+  ],
+  "exclude": ["test/**/*.ts"]
+}

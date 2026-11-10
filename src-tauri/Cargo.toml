@@ -1,0 +1,17 @@
+[package]
+name = "mindseb-backend"
+version = "0.1.0"
+description = "Native desktop backend and graph IPC router for mindseb"
+authors = ["PahesebPJ"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "mindseb_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mindseb-backend"
+path = "src/main.rs"
+
+[dependencies]
