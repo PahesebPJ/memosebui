@@ -1,5 +1,5 @@
-import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { buildMindGraph } from '../core/graph-builder.ts'
@@ -28,18 +28,71 @@ export interface UiServerInstance {
   getSnapshot: (projectId?: string, category?: MemoryCategory) => MindGraphSnapshot
 }
 
+function findExecutableInPath(binName: string): string | null {
+  const pathEnv = process.env.PATH || ''
+  const dirs = pathEnv.split(path.delimiter).filter(Boolean)
+  const extensions =
+    process.platform === 'win32' ? ['.exe', '.cmd', '.bat', ''] : ['']
+
+  for (const dir of dirs) {
+    for (const ext of extensions) {
+      const candidate = path.join(dir, `${binName}${ext}`)
+      try {
+        if (existsSync(candidate)) {
+          accessSync(candidate, constants.X_OK)
+          return candidate
+        }
+      } catch {
+        // Not executable, continue
+      }
+    }
+  }
+  return null
+}
+
+function spawnDetached(command: string, args: string[]): boolean {
+  try {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    child.on('error', () => {})
+    child.unref()
+    return Boolean(child.pid)
+  } catch {
+    return false
+  }
+}
+
+export async function isMindsebServerRunning(
+  port: number,
+  host = '127.0.0.1'
+): Promise<boolean> {
+  try {
+    const res = await fetch(`http://${host}:${port}/api/graph`, {
+      signal: AbortSignal.timeout(450),
+    })
+    if (!res.ok) return false
+    const data = (await res.json()) as Record<string, unknown>
+    return Boolean(data && typeof data === 'object' && 'nodes' in data && 'edges' in data)
+  } catch {
+    return false
+  }
+}
+
 export function launchStandaloneDesktopWindow(
   url: string,
   forceBrowser = false
 ): void {
   if (forceBrowser) {
-    const cmd =
-      process.platform === 'darwin'
-        ? 'open'
-        : process.platform === 'win32'
-          ? 'start'
-          : 'xdg-open'
-    execFile(cmd, [url], () => {})
+    if (process.platform === 'darwin') {
+      spawnDetached('open', [url])
+    } else if (process.platform === 'win32') {
+      spawnDetached('cmd.exe', ['/c', 'start', '', url])
+    } else {
+      spawnDetached('xdg-open', [url])
+    }
     return
   }
 
@@ -50,22 +103,34 @@ export function launchStandaloneDesktopWindow(
   ]
 
   if (process.platform === 'linux') {
+    const omarchyWebapp = findExecutableInPath('omarchy-launch-webapp')
+    if (omarchyWebapp) {
+      if (
+        spawnDetached(omarchyWebapp, [
+          url,
+          '--window-size=1360,860',
+          '--class=mindseb',
+        ])
+      ) {
+        return
+      }
+    }
+
     const candidates = [
       'chromium',
       'google-chrome',
       'google-chrome-stable',
       'brave',
+      'brave-browser',
       'microsoft-edge',
     ]
     for (const bin of candidates) {
-      try {
-        const p = execFile(bin, appArgs, () => {})
-        if (p.pid) return
-      } catch {
-        // try next candidate
+      const resolved = findExecutableInPath(bin)
+      if (resolved && spawnDetached(resolved, appArgs)) {
+        return
       }
     }
-    execFile('xdg-open', [url], () => {})
+    spawnDetached('xdg-open', [url])
     return
   }
 
@@ -76,30 +141,27 @@ export function launchStandaloneDesktopWindow(
       '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
     ]
     for (const bin of macCandidates) {
-      if (existsSync(bin)) {
-        execFile(bin, appArgs, () => {})
+      if (existsSync(bin) && spawnDetached(bin, appArgs)) {
         return
       }
     }
-    execFile('open', [url], () => {})
+    spawnDetached('open', [url])
     return
   }
 
   if (process.platform === 'win32') {
-    const winCandidates = ['msedge.exe', 'chrome.exe', 'brave.exe']
+    const winCandidates = ['msedge', 'chrome', 'brave']
     for (const bin of winCandidates) {
-      try {
-        const p = execFile(bin, appArgs, () => {})
-        if (p.pid) return
-      } catch {
-        // try next
+      const resolved = findExecutableInPath(bin)
+      if (resolved && spawnDetached(resolved, appArgs)) {
+        return
       }
     }
-    execFile('start', [url], () => {})
+    spawnDetached('cmd.exe', ['/c', 'start', '', url])
     return
   }
 
-  execFile('xdg-open', [url], () => {})
+  spawnDetached('xdg-open', [url])
 }
 
 export function generateMindUiHtml(initialProject = 'all'): string {
@@ -275,7 +337,8 @@ export function generateMindUiHtml(initialProject = 'all'): string {
   <script>
     (function() {
       const INITIAL_PROJECT = ${JSON.stringify(initialProject)};
-      let currentProject = INITIAL_PROJECT || 'all';
+      const queryProject = new URLSearchParams(window.location.search).get('project');
+      let currentProject = queryProject || INITIAL_PROJECT || 'all';
       let currentCategory = 'all';
       let minSimilarity = 0.38;
       let groupByCategory = false;
