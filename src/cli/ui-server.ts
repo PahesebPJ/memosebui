@@ -6,7 +6,7 @@ import { buildMindGraph } from '../core/graph-builder.ts'
 import { isMemoryCategory, VaultBridge } from '../core/vault-bridge.ts'
 import { VaultWatcher } from '../core/vault-watcher.ts'
 import type { MemoryCategory, MindGraphSnapshot } from '../types/mind.ts'
-import { PACKAGE_ROOT } from '../version.ts'
+import { BUNDLE_ID, PACKAGE_ROOT, VERSION } from '../version.ts'
 
 export interface UiServerOptions {
   port?: number
@@ -70,12 +70,12 @@ export async function isMemosebuiServerRunning(
   host = '127.0.0.1'
 ): Promise<boolean> {
   try {
-    const res = await fetch(`http://${host}:${port}/api/graph`, {
+    const res = await fetch(`http://${host}:${port}/api/health`, {
       signal: AbortSignal.timeout(450),
     })
     if (!res.ok) return false
     const data = (await res.json()) as Record<string, unknown>
-    return Boolean(data && typeof data === 'object' && 'nodes' in data && 'edges' in data)
+    return Boolean(data && typeof data === 'object' && data.status === 'ok')
   } catch {
     return false
   }
@@ -178,12 +178,7 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
   <div class="mind-shell">
     <header class="mind-topbar">
       <div class="topbar-left">
-        <div class="traffic-lights">
-          <span class="traffic-light close" title="Cerrar"></span>
-          <span class="traffic-light minimize" title="Minimizar"></span>
-          <span class="traffic-light maximize" title="Maximizar"></span>
-        </div>
-        <span class="brand-badge">🧠 memosebui</span>
+        <span class="brand-badge"><span class="brand-mark">M</span>memosebui</span>
         <span id="liveIndicator" class="live-indicator">
           <span id="liveDot" class="live-dot"></span>
           <span id="liveText">Conectando…</span>
@@ -197,7 +192,7 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
 
         <div class="search-box">
           <span class="search-icon">🔍</span>
-          <input id="searchInput" type="text" class="search-input" placeholder="Búsqueda híbrida RRF (vector + FTS5)…" autocomplete="off" />
+          <input id="searchInput" type="text" class="search-input" placeholder="Buscar recuerdos…" autocomplete="off" />
           <span class="search-kbd">⌘K</span>
         </div>
 
@@ -207,17 +202,17 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
       </div>
 
       <div class="topbar-right">
-        <button id="newMemoryBtn" class="btn btn-primary" title="Registrar nuevo recuerdo en memoseb">
-          <span>＋ Recuerdo</span>
-        </button>
         <button id="analyzeBtn" class="btn" title="Analizar un repositorio con memoseb analyze">
-          <span>⚡ Analizar Repo</span>
+          <span>⚡ Analizar</span>
         </button>
         <button id="p2pToggleBtn" class="btn" title="Ver topología de red P2P y Grupos ACL">
-          <span>🌐 Red P2P / ACL</span>
+          <span>🌐 Red P2P</span>
         </button>
         <button id="themeToggleBtn" class="btn" title="Alternar tema Oscuro / Claro">
           <span id="themeIcon">☀️</span>
+        </button>
+        <button id="newMemoryBtn" class="btn btn-primary" title="Registrar nuevo recuerdo en memoseb">
+          <span>＋ Recuerdo</span>
         </button>
       </div>
     </header>
@@ -226,23 +221,24 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
       <div class="graph-stage">
         <div class="floating-filters" id="categoryFilters">
           <button class="cat-chip active" data-cat="all">Todas</button>
-          <button class="cat-chip" data-cat="architecture"><span class="cat-dot" style="background:#38bdf8"></span>architecture</button>
-          <button class="cat-chip" data-cat="convention"><span class="cat-dot" style="background:#a855f7"></span>convention</button>
-          <button class="cat-chip" data-cat="bugfix"><span class="cat-dot" style="background:#f97316"></span>bugfix</button>
-          <button class="cat-chip" data-cat="decision"><span class="cat-dot" style="background:#10b981"></span>decision</button>
-          <button class="cat-chip" data-cat="domain"><span class="cat-dot" style="background:#6366f1"></span>domain</button>
+          <button class="cat-chip" data-cat="architecture"><span class="cat-dot" style="background:#67E8F9"></span>architecture</button>
+          <button class="cat-chip" data-cat="convention"><span class="cat-dot" style="background:#A78BFA"></span>convention</button>
+          <button class="cat-chip" data-cat="bugfix"><span class="cat-dot" style="background:#FB923C"></span>bugfix</button>
+          <button class="cat-chip" data-cat="decision"><span class="cat-dot" style="background:#34D399"></span>decision</button>
+          <button class="cat-chip" data-cat="domain"><span class="cat-dot" style="background:#818CF8"></span>domain</button>
         </div>
 
         <canvas id="mindCanvas"></canvas>
 
         <div class="floating-hud">
           <div class="hud-slider-group">
-            <span>Similitud Vectorial:</span>
+            <span>Similitud</span>
             <input id="simSlider" type="range" min="0.20" max="0.80" step="0.02" value="0.38" />
             <strong id="simValueLabel">38%</strong>
           </div>
           <span>·</span>
-          <button id="resetViewBtn" class="btn" style="height:26px;padding:0 8px;font-size:11px;">Centrar Vista</button>
+          <button id="resetViewBtn" class="hud-pill-btn">Centrar</button>
+          <button id="loadAllBtn" class="hud-pill-btn" style="display:none;">Ver todos</button>
           <span id="graphMetricsLabel">0 nodos · 0 enlaces</span>
         </div>
 
@@ -342,12 +338,15 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
       let currentCategory = 'all';
       let minSimilarity = 0.38;
       let groupByCategory = false;
+      let showAllNodes = false;
+      const DEFAULT_OVERVIEW_LIMIT = 450;
 
       let snapshot = null;
       let simNodes = [];
       let simEdges = [];
       let particles = [];
       let ripples = [];
+      let simAlpha = 1;
       let selectedNodeId = null;
       let hoveredNodeId = null;
       let draggedNode = null;
@@ -377,6 +376,7 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
       const inspectorActions = document.getElementById('inspectorActions');
       const inspectorBody = document.getElementById('inspectorBody');
       const groupToggleBtn = document.getElementById('groupToggleBtn');
+      const loadAllBtn = document.getElementById('loadAllBtn');
       const p2pToggleBtn = document.getElementById('p2pToggleBtn');
       const p2pPanel = document.getElementById('p2pPanel');
       const p2pContent = document.getElementById('p2pContent');
@@ -429,13 +429,15 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
       }
       document.getElementById('resetViewBtn').addEventListener('click', resetCamera);
 
-      // Load Graph Snapshot
+      // Load Graph Snapshot (with adaptive hybrid limit)
       async function loadGraph(spawnRippleForId) {
+        const useLimit = !showAllNodes && currentProject === 'all' && currentCategory === 'all';
         const params = new URLSearchParams({
           project: currentProject,
           category: currentCategory,
           minSimilarity: String(minSimilarity),
           groupByCategory: String(groupByCategory),
+          limit: useLimit ? String(DEFAULT_OVERVIEW_LIMIT) : '0',
         });
         const res = await fetch('/api/graph?' + params.toString());
         if (!res.ok) return;
@@ -444,10 +446,24 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         updateProjectDropdown(snapshot.projects);
         liveText.textContent =
           'En vivo · ' +
-          snapshot.stats.memoryCount +
+          snapshot.stats.memoryCount.toLocaleString() +
           ' recuerdos · ' +
           snapshot.stats.totalTokens.toLocaleString() +
           ' tokens';
+
+        const totalAvail = snapshot.totalAvailableMemories || snapshot.stats.memoryCount;
+        if (snapshot.truncated) {
+          loadAllBtn.style.display = 'inline-flex';
+          loadAllBtn.classList.remove('active');
+          loadAllBtn.textContent = 'Ver todos (' + totalAvail.toLocaleString() + ')';
+        } else if (showAllNodes && totalAvail > DEFAULT_OVERVIEW_LIMIT && currentProject === 'all' && currentCategory === 'all') {
+          loadAllBtn.style.display = 'inline-flex';
+          loadAllBtn.classList.add('active');
+          loadAllBtn.textContent = 'Vista rápida (' + DEFAULT_OVERVIEW_LIMIT + ')';
+        } else {
+          loadAllBtn.style.display = 'none';
+        }
+
         graphMetricsLabel.textContent =
           snapshot.nodes.length + ' nodos · ' + snapshot.edges.length + ' enlaces';
 
@@ -521,57 +537,82 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
           }))
           .filter(e => e.sourceNode && e.targetNode);
 
-        // Rebuild synaptic particles along edges
-        particles = simEdges.slice(0, 80).map((edge, i) => ({
+        // Rebuild synaptic particles (capped for performance)
+        const maxParticles = simNodes.length > 500 ? 35 : 70;
+        particles = simEdges.slice(0, maxParticles).map((edge, i) => ({
           edge,
           t: (i * 0.17) % 1,
           speed: edge.kind === 'semantic-similarity' ? 0.0055 : 0.0038,
         }));
+
+        // Wake simulation & pre-warm layout synchronously
+        simAlpha = 1;
+        const prewarmTicks = simNodes.length > 600 ? 30 : 45;
+        for (let t = 0; t < prewarmTicks; t++) {
+          runPhysicsTick();
+        }
       }
 
-      // Physics Step & 60fps Canvas Render
-      let frameTick = 0;
-      function stepAndRender() {
-        frameTick += 0.035;
-        const rect = canvas.parentElement.getBoundingClientRect();
-        const W = rect.width;
-        const H = rect.height;
-
-        // Smooth camera interpolation
-        camX += (targetCamX - camX) * 0.14;
-        camY += (targetCamY - camY) * 0.14;
-        camScale += (targetCamScale - camScale) * 0.14;
-
-        // 1. Physics forces
+      // O(N) Spatial Hash Grid Physics Tick
+      const GRID_CELL = 180;
+      const spatialGrid = new Map();
+      function runPhysicsTick() {
         const N = simNodes.length;
+        if (N === 0) return;
+        const alpha = simAlpha;
+        spatialGrid.clear();
+
+        for (let i = 0; i < N; i++) {
+          const n = simNodes[i];
+          if (!n.pinned && n !== draggedNode) {
+            const grav = n.type === 'project' ? 0.0022 : 0.0008;
+            n.vx -= n.x * grav * alpha;
+            n.vy -= n.y * grav * alpha;
+          }
+          const cx = Math.floor(n.x / GRID_CELL);
+          const cy = Math.floor(n.y / GRID_CELL);
+          const key = (cx + 32768) * 65536 + (cy + 32768);
+          let bucket = spatialGrid.get(key);
+          if (!bucket) {
+            bucket = [];
+            spatialGrid.set(key, bucket);
+          }
+          bucket.push(n);
+        }
+
+        // Repulsion only against 3x3 neighboring spatial cells
         for (let i = 0; i < N; i++) {
           const a = simNodes[i];
-          if (!a.pinned && a !== draggedNode) {
-            // Soft centering gravity
-            const grav = a.type === 'project' ? 0.0018 : 0.0007;
-            a.vx -= a.x * grav;
-            a.vy -= a.y * grav;
-          }
-          for (let j = i + 1; j < N; j++) {
-            const b = simNodes[j];
-            let dx = b.x - a.x;
-            let dy = b.y - a.y;
-            let distSq = dx * dx + dy * dy;
-            if (distSq < 4) {
-              dx = (Math.random() - 0.5) * 2;
-              dy = (Math.random() - 0.5) * 2;
-              distSq = 4;
-            }
-            const dist = Math.sqrt(distSq);
-            const minGap = a.radius + b.radius + 26;
-            const repulse = (a.type === 'project' || b.type === 'project') ? 2600 : 1250;
-            if (dist < 360) {
-              let force = repulse / distSq;
-              if (dist < minGap) force += (minGap - dist) * 0.12;
-              const fx = (dx / dist) * force;
-              const fy = (dy / dist) * force;
-              if (!a.pinned && a !== draggedNode) { a.vx -= fx; a.vy -= fy; }
-              if (!b.pinned && b !== draggedNode) { b.vx += fx; b.vy += fy; }
+          const cx = Math.floor(a.x / GRID_CELL);
+          const cy = Math.floor(a.y / GRID_CELL);
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              const key = (cx + ox + 32768) * 65536 + (cy + oy + 32768);
+              const bucket = spatialGrid.get(key);
+              if (!bucket) continue;
+              for (let k = 0; k < bucket.length; k++) {
+                const b = bucket[k];
+                if (b === a || a.id >= b.id) continue;
+                let dx = b.x - a.x;
+                let dy = b.y - a.y;
+                let distSq = dx * dx + dy * dy;
+                if (distSq < 4) {
+                  dx = (Math.random() - 0.5) * 2;
+                  dy = (Math.random() - 0.5) * 2;
+                  distSq = 4;
+                }
+                if (distSq < 32400) {
+                  const dist = Math.sqrt(distSq);
+                  const minGap = a.radius + b.radius + 22;
+                  const repulse = (a.type === 'project' || b.type === 'project') ? 2200 : 1050;
+                  let force = (repulse / distSq) * alpha;
+                  if (dist < minGap) force += (minGap - dist) * 0.14 * alpha;
+                  const fx = (dx / dist) * force;
+                  const fy = (dy / dist) * force;
+                  if (!a.pinned && a !== draggedNode) { a.vx -= fx; a.vy -= fy; }
+                  if (!b.pinned && b !== draggedNode) { b.vx += fx; b.vy += fy; }
+                }
+              }
             }
           }
         }
@@ -585,11 +626,11 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
           const dy = t.y - s.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
           const targetLen =
-            e.kind === 'project-memory' ? 118 :
-            e.kind === 'project-category' ? 88 :
-            e.kind === 'category-memory' ? 78 :
-            e.kind === 'semantic-similarity' ? 145 : 160;
-          const k = e.kind === 'semantic-similarity' ? 0.014 * e.weight : 0.032;
+            e.kind === 'project-memory' ? 115 :
+            e.kind === 'project-category' ? 85 :
+            e.kind === 'category-memory' ? 76 :
+            e.kind === 'semantic-similarity' ? 140 : 155;
+          const k = (e.kind === 'semantic-similarity' ? 0.014 * e.weight : 0.032) * alpha;
           const f = (dist - targetLen) * k;
           const fx = (dx / dist) * f;
           const fy = (dy / dist) * f;
@@ -605,93 +646,168 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
             n.vy = 0;
             continue;
           }
-          n.vx *= 0.82;
-          n.vy *= 0.82;
+          n.vx *= 0.80;
+          n.vy *= 0.80;
           n.x += n.vx;
           n.y += n.vy;
         }
 
-        // 2. Render Canvas
+        if (!draggedNode) {
+          simAlpha = Math.max(0, simAlpha * 0.982);
+        }
+      }
+
+      // Physics Step & 60fps Batched Canvas Render
+      let frameTick = 0;
+      function stepAndRender() {
+        frameTick += 0.035;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const W = rect.width;
+        const H = rect.height;
+
+        // Smooth camera interpolation
+        camX += (targetCamX - camX) * 0.14;
+        camY += (targetCamY - camY) * 0.14;
+        camScale += (targetCamScale - camScale) * 0.14;
+
+        // 1. Physics forces (pause when cooled)
+        if (simAlpha >= 0.008 || draggedNode) {
+          runPhysicsTick();
+        }
+
+        // 2. Render Canvas with Viewport Culling & Batching
         ctx.clearRect(0, 0, W, H);
         ctx.save();
         ctx.translate(camX, camY);
         ctx.scale(camScale, camScale);
 
+        const pad = 80 / camScale;
+        const viewMinX = -camX / camScale - pad;
+        const viewMaxX = (W - camX) / camScale + pad;
+        const viewMinY = -camY / camScale - pad;
+        const viewMaxY = (H - camY) / camScale + pad;
+
+        const N = simNodes.length;
         const activeFocusId = hoveredNodeId || selectedNodeId;
         const neighborIds = new Set();
         if (activeFocusId) {
           neighborIds.add(activeFocusId);
-          simEdges.forEach(e => {
+          for (let i = 0; i < simEdges.length; i++) {
+            const e = simEdges[i];
             if (e.source === activeFocusId) neighborIds.add(e.target);
             if (e.target === activeFocusId) neighborIds.add(e.source);
-          });
+          }
         }
 
-        // Draw Edges
+        // Batched Edges by category (3 draw calls instead of 10,000)
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        const highlightedEdges = [];
+
+        ctx.lineWidth = 1.1;
+        ctx.strokeStyle = activeFocusId
+          ? (isLight ? 'rgba(17,24,39,0.05)' : 'rgba(255,255,255,0.04)')
+          : (isLight ? 'rgba(17,24,39,0.12)' : 'rgba(255,255,255,0.09)');
+        ctx.beginPath();
         for (let i = 0; i < simEdges.length; i++) {
           const e = simEdges[i];
+          if (e.kind === 'semantic-similarity' || e.kind === 'shared-tag') continue;
           const s = e.sourceNode;
           const t = e.targetNode;
-          const isHighlighted =
-            activeFocusId && (e.source === activeFocusId || e.target === activeFocusId);
-          const isDimmed = activeFocusId && !isHighlighted;
+          if ((s.x < viewMinX && t.x < viewMinX) || (s.x > viewMaxX && t.x > viewMaxX) ||
+              (s.y < viewMinY && t.y < viewMinY) || (s.y > viewMaxY && t.y > viewMaxY)) continue;
+          if (activeFocusId && (e.source === activeFocusId || e.target === activeFocusId)) {
+            highlightedEdges.push(e);
+            continue;
+          }
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+        }
+        ctx.stroke();
 
-          ctx.save();
+        ctx.strokeStyle = activeFocusId
+          ? 'rgba(167, 139, 250, 0.06)'
+          : 'rgba(167, 139, 250, 0.24)';
+        ctx.beginPath();
+        for (let i = 0; i < simEdges.length; i++) {
+          const e = simEdges[i];
+          if (e.kind !== 'semantic-similarity') continue;
+          const s = e.sourceNode;
+          const t = e.targetNode;
+          if ((s.x < viewMinX && t.x < viewMinX) || (s.x > viewMaxX && t.x > viewMaxX) ||
+              (s.y < viewMinY && t.y < viewMinY) || (s.y > viewMaxY && t.y > viewMaxY)) continue;
+          if (activeFocusId && (e.source === activeFocusId || e.target === activeFocusId)) {
+            highlightedEdges.push(e);
+            continue;
+          }
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+        }
+        ctx.stroke();
+
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = activeFocusId
+          ? 'rgba(148, 163, 184, 0.05)'
+          : 'rgba(148, 163, 184, 0.14)';
+        ctx.beginPath();
+        for (let i = 0; i < simEdges.length; i++) {
+          const e = simEdges[i];
+          if (e.kind !== 'shared-tag') continue;
+          const s = e.sourceNode;
+          const t = e.targetNode;
+          if ((s.x < viewMinX && t.x < viewMinX) || (s.x > viewMaxX && t.x > viewMaxX) ||
+              (s.y < viewMinY && t.y < viewMinY) || (s.y > viewMaxY && t.y > viewMaxY)) continue;
+          if (activeFocusId && (e.source === activeFocusId || e.target === activeFocusId)) {
+            highlightedEdges.push(e);
+            continue;
+          }
+          ctx.moveTo(s.x, s.y);
+          ctx.lineTo(t.x, t.y);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // Draw only highlighted edges individually
+        for (let i = 0; i < highlightedEdges.length; i++) {
+          const e = highlightedEdges[i];
+          const s = e.sourceNode;
+          const t = e.targetNode;
           ctx.beginPath();
           ctx.moveTo(s.x, s.y);
           ctx.lineTo(t.x, t.y);
-
-          if (e.kind === 'semantic-similarity') {
-            ctx.strokeStyle = isHighlighted
-              ? '#c084fc'
-              : isDimmed
-                ? 'rgba(168, 85, 247, 0.07)'
-                : 'rgba(168, 85, 247, 0.36)';
-            ctx.lineWidth = isHighlighted ? 2.2 : 1.3;
-          } else if (e.kind === 'shared-tag') {
-            ctx.setLineDash([4, 4]);
-            ctx.strokeStyle = isHighlighted
-              ? '#38bdf8'
-              : 'rgba(148, 163, 184, 0.18)';
-            ctx.lineWidth = 1.1;
-          } else {
-            ctx.strokeStyle = isHighlighted
-              ? '#38bdf8'
-              : isDimmed
-                ? 'rgba(148, 163, 184, 0.08)'
-                : 'rgba(148, 163, 184, 0.26)';
-            ctx.lineWidth = isHighlighted ? 2.0 : 1.25;
-          }
+          ctx.strokeStyle = e.kind === 'semantic-similarity' ? '#B8DF52' : '#67E8F9';
+          ctx.lineWidth = 2.0;
           ctx.stroke();
-
-          if (isHighlighted && e.label) {
+          if (e.label) {
             const mx = (s.x + t.x) / 2;
             const my = (s.y + t.y) / 2;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.fillStyle = isLight ? 'rgba(255,255,255,0.92)' : 'rgba(20, 23, 29, 0.9)';
             ctx.fillRect(mx - 18, my - 8, 36, 16);
-            ctx.fillStyle = '#e2e8f0';
+            ctx.fillStyle = isLight ? '#111827' : '#B8DF52';
             ctx.font = '600 9.5px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(e.label, mx, my);
           }
-          ctx.restore();
         }
 
         // Draw Synaptic Particles
-        for (let i = 0; i < particles.length; i++) {
-          const p = particles[i];
-          p.t = (p.t + p.speed) % 1;
-          const e = p.edge;
-          if (activeFocusId && e.source !== activeFocusId && e.target !== activeFocusId) {
-            continue;
+        if (N <= 800 || activeFocusId) {
+          for (let i = 0; i < particles.length; i++) {
+            const p = particles[i];
+            p.t = (p.t + p.speed) % 1;
+            const e = p.edge;
+            if (activeFocusId && e.source !== activeFocusId && e.target !== activeFocusId) {
+              continue;
+            }
+            const px = e.sourceNode.x + (e.targetNode.x - e.sourceNode.x) * p.t;
+            const py = e.sourceNode.y + (e.targetNode.y - e.sourceNode.y) * p.t;
+            if (px < viewMinX || px > viewMaxX || py < viewMinY || py > viewMaxY) continue;
+            ctx.beginPath();
+            ctx.arc(px, py, e.kind === 'semantic-similarity' ? 2.1 : 1.6, 0, Math.PI * 2);
+            ctx.fillStyle = e.kind === 'semantic-similarity' ? '#B8DF52' : '#67E8F9';
+            ctx.fill();
           }
-          const px = e.sourceNode.x + (e.targetNode.x - e.sourceNode.x) * p.t;
-          const py = e.sourceNode.y + (e.targetNode.y - e.sourceNode.y) * p.t;
-          ctx.beginPath();
-          ctx.arc(px, py, e.kind === 'semantic-similarity' ? 2.2 : 1.7, 0, Math.PI * 2);
-          ctx.fillStyle = e.kind === 'semantic-similarity' ? '#e879f9' : '#38bdf8';
-          ctx.fill();
         }
 
         // Draw Ripples
@@ -713,30 +829,37 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
           ctx.restore();
         }
 
-        // Draw Nodes
+        // Draw Nodes (with Viewport Culling & LOD)
         const isSearchActive = searchScoresById.size > 0;
+        const showSecondaryLabels = camScale >= (N > 350 ? 0.85 : 0.52);
+        const labelColor = isLight ? '#111827' : '#F3F5F7';
+
         for (let i = 0; i < N; i++) {
           const n = simNodes[i];
+          if (n.x + n.radius < viewMinX || n.x - n.radius > viewMaxX ||
+              n.y + n.radius < viewMinY || n.y - n.radius > viewMaxY) {
+            continue;
+          }
+
           const searchHit = n.memoryId ? searchScoresById.get(n.memoryId) : null;
           const isFocused = n.id === selectedNodeId || n.id === hoveredNodeId;
           const isNeighbor = neighborIds.has(n.id);
 
           let alpha = 1;
           if (isSearchActive) {
-            alpha = (searchHit || n.type === 'project') ? 1 : 0.16;
+            alpha = (searchHit || n.type === 'project') ? 1 : 0.14;
           } else if (activeFocusId && !isNeighbor) {
-            alpha = 0.2;
+            alpha = 0.18;
           }
 
-          ctx.save();
           ctx.globalAlpha = alpha;
 
-          // Breathing halo for high importance or search hit
-          const pulse = Math.sin(frameTick + (n.phase || 0)) * 2.4;
-          if (n.type === 'project' || (n.importance && n.importance >= 0.8) || searchHit || isFocused) {
+          // Subtle halo only for focused, search hit, or project nodes (keeps 2000-node render crisp)
+          if (n.type === 'project' || searchHit || isFocused) {
+            const pulse = Math.sin(frameTick + (n.phase || 0)) * 2.0;
             ctx.beginPath();
             ctx.arc(n.x, n.y, n.radius + 5 + Math.max(0, pulse), 0, Math.PI * 2);
-            ctx.fillStyle = searchHit ? 'rgba(56, 189, 248, 0.28)' : n.color + '28';
+            ctx.fillStyle = isFocused || searchHit ? 'rgba(184, 223, 82, 0.24)' : n.color + '24';
             ctx.fill();
           }
 
@@ -746,34 +869,32 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
           ctx.fillStyle = n.color;
           ctx.fill();
 
-          ctx.lineWidth = isFocused ? 3 : searchHit ? 2.5 : 1.5;
-          ctx.strokeStyle = isFocused ? '#ffffff' : searchHit ? '#38bdf8' : 'rgba(255,255,255,0.35)';
-          ctx.stroke();
+          if (isFocused || searchHit || n.type === 'project') {
+            ctx.lineWidth = isFocused ? 2.6 : searchHit ? 2.2 : 1.4;
+            ctx.strokeStyle = isFocused || searchHit ? '#B8DF52' : 'rgba(255,255,255,0.35)';
+            ctx.stroke();
+          }
 
-          // Inner icon or badge for project nodes
+          // Inner badge for project nodes
           if (n.type === 'project') {
-            ctx.fillStyle = '#0f172a';
+            ctx.fillStyle = '#0D0F13';
             ctx.font = '700 10px sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(n.label.slice(0, 3).toUpperCase(), n.x, n.y);
           }
 
-          // Node label
-          if (camScale >= 0.55 || n.type === 'project' || isFocused || searchHit) {
-            const labelText = n.label.length > 28 ? n.label.slice(0, 26) + '…' : n.label;
-            ctx.font = (n.type === 'project' ? '700 12px ' : '500 11px ') + 'sans-serif';
+          // Node label (LOD)
+          if (showSecondaryLabels || n.type === 'project' || isFocused || searchHit || (activeFocusId && isNeighbor)) {
+            const labelText = n.label.length > 26 ? n.label.slice(0, 24) + '…' : n.label;
+            ctx.font = (n.type === 'project' ? '700 11.5px ' : '500 10.5px ') + 'sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
-            const textY = n.y + n.radius + 5;
-            ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'light'
-              ? '#0f172a'
-              : '#f1f5f9';
-            ctx.fillText(labelText, n.x, textY);
+            ctx.fillStyle = labelColor;
+            ctx.fillText(labelText, n.x, n.y + n.radius + 5);
           }
-
-          ctx.restore();
         }
+        ctx.globalAlpha = 1;
 
         ctx.restore();
         requestAnimationFrame(stepAndRender);
@@ -822,6 +943,7 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         if (draggedNode) {
           draggedNode.x = pt.x;
           draggedNode.y = pt.y;
+          simAlpha = Math.max(simAlpha, 0.35);
           return;
         }
         if (isPanning) {
@@ -890,22 +1012,43 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         if (!snapshot) return;
         if (node.type === 'project') {
           const projMems = snapshot.memories.filter(m => m.projectId === node.projectId);
+          const pageSize = 40;
+          const visibleMems = projMems.slice(0, pageSize);
           inspectorHeaderTitle.textContent = 'Nodo Proyecto';
           inspectorActions.innerHTML = '';
           inspectorBody.innerHTML =
             '<div class="node-card-title">📦 ' + escapeHtml(node.label) + '</div>' +
             '<div class="badge-row"><span class="badge">' + escapeHtml(node.subtitle || '') + '</span></div>' +
             '<div style="font-size:11.5px;color:var(--text-muted);font-family:var(--font-mono);">' + escapeHtml((node.meta && node.meta.rootPath) || '') + '</div>' +
-            '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:6px;">Nodos aprendidos en este proyecto (' + projMems.length + ')</div>' +
-            '<div class="related-list">' +
-              projMems.map(m =>
+            '<div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-top:6px;">Nodos aprendidos (' + projMems.length + ')</div>' +
+            '<div class="related-list" id="projMemList">' +
+              visibleMems.map(m =>
                 '<div class="related-item" data-jump-mem="' + escapeHtml(m.id) + '">' +
                   '<span class="related-item-title">' + escapeHtml(m.title) + '</span>' +
                   '<span class="badge">' + escapeHtml(m.category) + '</span>' +
                 '</div>'
               ).join('') +
-            '</div>';
+            '</div>' +
+            (projMems.length > pageSize
+              ? '<button id="showMoreProjMemsBtn" class="btn" style="width:100%;justify-content:center;">Mostrar más (' + (projMems.length - pageSize) + ' restantes)</button>'
+              : '');
           bindJumpListeners();
+          const moreBtn = document.getElementById('showMoreProjMemsBtn');
+          if (moreBtn) {
+            moreBtn.addEventListener('click', () => {
+              const listEl = document.getElementById('projMemList');
+              if (listEl) {
+                listEl.innerHTML = projMems.slice(0, 200).map(m =>
+                  '<div class="related-item" data-jump-mem="' + escapeHtml(m.id) + '">' +
+                    '<span class="related-item-title">' + escapeHtml(m.title) + '</span>' +
+                    '<span class="badge">' + escapeHtml(m.category) + '</span>' +
+                  '</div>'
+                ).join('');
+                bindJumpListeners();
+              }
+              moreBtn.remove();
+            });
+          }
           return;
         }
 
@@ -1052,9 +1195,16 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         });
       });
 
+      let simTimer = null;
       simSlider.addEventListener('input', (e) => {
         minSimilarity = parseFloat(e.target.value);
         simValueLabel.textContent = Math.round(minSimilarity * 100) + '%';
+        if (simTimer) clearTimeout(simTimer);
+        simTimer = setTimeout(() => loadGraph(), 140);
+      });
+
+      loadAllBtn.addEventListener('click', () => {
+        showAllNodes = !showAllNodes;
         loadGraph();
       });
 
@@ -1250,6 +1400,13 @@ export async function startUiServer(
   const host = options?.host ?? '127.0.0.1'
   const bridge = new VaultBridge({ dbPath: options?.dbPath })
   const sseClients = new Set<http.ServerResponse>()
+  const graphCache = new Map<string, ReturnType<typeof buildMindGraph>>()
+  let cacheEpoch = 0
+
+  function invalidateGraphCache(): void {
+    cacheEpoch++
+    graphCache.clear()
+  }
 
   function broadcastEvent(
     type: string,
@@ -1274,6 +1431,7 @@ export async function startUiServer(
     watcher = new VaultWatcher({
       bridge,
       onChange: (fingerprint) => {
+        invalidateGraphCache()
         broadcastEvent('vault:changed', { fingerprint })
       },
     })
@@ -1321,6 +1479,16 @@ export async function startUiServer(
         return
       }
 
+      if (method === 'GET' && pathname === '/api/health') {
+        sendJson(res, 200, {
+          status: 'ok',
+          bundleId: BUNDLE_ID,
+          version: VERSION,
+          stats: bridge.getStats(),
+        })
+        return
+      }
+
       if (method === 'GET' && pathname === '/api/graph') {
         const projectParam = parsedUrl.searchParams.get('project') ?? undefined
         const catParam = parsedUrl.searchParams.get('category') ?? undefined
@@ -1329,17 +1497,37 @@ export async function startUiServer(
         )
         const groupParam =
           parsedUrl.searchParams.get('groupByCategory') === 'true'
+        const limitRaw = parsedUrl.searchParams.get('limit')
+        const limitParsed = limitRaw !== null ? Number(limitRaw) : undefined
+        const maxMemoryNodes =
+          limitParsed !== undefined &&
+          !Number.isNaN(limitParsed) &&
+          limitParsed > 0
+            ? Math.floor(limitParsed)
+            : undefined
 
         const category: MemoryCategory | undefined =
           catParam && isMemoryCategory(catParam) ? catParam : undefined
+        const minSimilarity = Number.isNaN(minSimParam) ? 0.38 : minSimParam
+        const effectiveProject =
+          projectParam && projectParam !== 'all' ? projectParam : undefined
 
-        const snapshot = buildMindGraph(bridge, {
-          projectId:
-            projectParam && projectParam !== 'all' ? projectParam : undefined,
-          category,
-          minSimilarity: Number.isNaN(minSimParam) ? 0.38 : minSimParam,
-          groupByCategory: groupParam,
-        })
+        const cacheKey = `${cacheEpoch}|${effectiveProject ?? 'all'}|${category ?? 'all'}|${minSimilarity.toFixed(2)}|${groupParam}|${maxMemoryNodes ?? 'all'}`
+        let snapshot = graphCache.get(cacheKey)
+        if (!snapshot) {
+          snapshot = buildMindGraph(bridge, {
+            projectId: effectiveProject,
+            category,
+            minSimilarity,
+            groupByCategory: groupParam,
+            maxMemoryNodes,
+          })
+          if (graphCache.size >= 16) {
+            const oldestKey = graphCache.keys().next().value
+            if (oldestKey !== undefined) graphCache.delete(oldestKey)
+          }
+          graphCache.set(cacheKey, snapshot)
+        }
         sendJson(res, 200, snapshot)
         return
       }
@@ -1395,8 +1583,24 @@ export async function startUiServer(
             typeof body.importance === 'number' ? body.importance : undefined,
         })
 
+        invalidateGraphCache()
         broadcastEvent('memory:created', { memoryId: outcome.memory.id })
         sendJson(res, 201, outcome)
+        return
+      }
+
+      if (method === 'GET' && pathname.startsWith('/api/memories/')) {
+        const id = decodeURIComponent(pathname.slice('/api/memories/'.length))
+        if (!id) {
+          sendJson(res, 400, { error: 'Memory ID is required.' })
+          return
+        }
+        const memory = bridge.getMemoryById(id)
+        if (!memory) {
+          sendJson(res, 404, { error: 'Memory not found.' })
+          return
+        }
+        sendJson(res, 200, { memory })
         return
       }
 
@@ -1416,6 +1620,7 @@ export async function startUiServer(
             sendJson(res, 404, { error: 'Memory not found.' })
             return
           }
+          invalidateGraphCache()
           broadcastEvent('memory:deleted', { memoryId: id })
           sendJson(res, 200, { deleted: true, id })
           return
@@ -1444,6 +1649,7 @@ export async function startUiServer(
           sendJson(res, 404, { error: 'Memory not found.' })
           return
         }
+        invalidateGraphCache()
         broadcastEvent('memory:updated', { memoryId: updated.id })
         sendJson(res, 200, { memory: updated })
         return
@@ -1457,6 +1663,7 @@ export async function startUiServer(
           return
         }
         const report = bridge.analyzeProjectDirectory(targetPath)
+        invalidateGraphCache()
         broadcastEvent('vault:changed', { projectId: report.projectId })
         sendJson(res, 200, report)
         return

@@ -19,11 +19,11 @@ export const MEMORY_CATEGORIES: readonly MemoryCategory[] = [
 ] as const
 
 export const CATEGORY_COLORS: Record<MemoryCategory, string> = {
-  architecture: '#38bdf8',
-  convention: '#a855f7',
-  bugfix: '#f97316',
-  decision: '#10b981',
-  domain: '#6366f1',
+  architecture: '#67E8F9',
+  convention: '#A78BFA',
+  bugfix: '#FB923C',
+  decision: '#34D399',
+  domain: '#818CF8',
 }
 
 export interface MemoryRecord {
@@ -165,6 +165,7 @@ export interface GraphBuildOptions {
   includeSharedTags?: boolean
   includeCrossProjectLinks?: boolean
   groupByCategory?: boolean
+  maxMemoryNodes?: number
 }
 
 export interface MindGraphSnapshot {
@@ -175,6 +176,8 @@ export interface MindGraphSnapshot {
   relatedByMemoryId: Record<string, RelatedMemoryLink[]>
   nodes: GraphNode[]
   edges: GraphEdge[]
+  truncated?: boolean
+  totalAvailableMemories?: number
   p2p: {
     nodeConfig: NodeConfiguration
     peers: SyncPeerRecord[]
