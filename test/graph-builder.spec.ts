@@ -57,4 +57,54 @@ describe('GraphBuilder', () => {
 
     bridge.close()
   })
+
+  it('builds 1000+ memory graph quickly and supports maxMemoryNodes truncation', () => {
+    const bridge = new VaultBridge({ dbPath: ':memory:' })
+    for (let i = 0; i < 600; i++) {
+      bridge.createMemory({
+        projectId: i % 2 === 0 ? 'proj-a' : 'proj-b',
+        category: i % 3 === 0 ? 'architecture' : 'decision',
+        title: `Memory Node ${i}`,
+        content: `Content about sqlite vectors graph performance optimization item ${i}`,
+        tags: ['sqlite', `tag-${i % 15}`],
+        importance: 0.5 + (i % 5) * 0.1,
+      })
+    }
+
+    const t0 = performance.now()
+    const full = buildMindGraph(bridge, { minSimilarity: 0.45 })
+    const elapsedMs = performance.now() - t0
+
+    assert.equal(full.stats.memoryCount, 600)
+    assert.equal(full.truncated, false)
+    assert.ok(elapsedMs < 3000, `Expected buildMindGraph(600) < 3000ms, got ${elapsedMs}ms`)
+
+    const sliced = buildMindGraph(bridge, { maxMemoryNodes: 150 })
+    assert.equal(sliced.memories.length, 150)
+    assert.equal(sliced.truncated, true)
+    assert.equal(sliced.totalAvailableMemories, 600)
+
+    // Verify duplicate/mixed-case tags within the same memory do not inflate shared-tag edges
+    const dupBridge = new VaultBridge({ dbPath: ':memory:' })
+    dupBridge.createMemory({
+      projectId: 'p1',
+      category: 'domain',
+      title: 'Alpha',
+      content: 'Unique alpha content one',
+      tags: ['SQLite', 'sqlite'],
+    })
+    dupBridge.createMemory({
+      projectId: 'p2',
+      category: 'bugfix',
+      title: 'Beta',
+      content: 'Completely unrelated beta text two',
+      tags: ['sqlite'],
+    })
+    const dupGraph = buildMindGraph(dupBridge, { minSimilarity: 0.9 })
+    const sharedTagEdges = dupGraph.edges.filter((e) => e.kind === 'shared-tag')
+    assert.equal(sharedTagEdges.length, 0)
+    dupBridge.close()
+
+    bridge.close()
+  })
 })

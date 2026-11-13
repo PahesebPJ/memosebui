@@ -69,14 +69,15 @@ async function handleStatus(jsonMode: boolean, port: number): Promise<void> {
   let projectCount = 0
 
   try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/graph`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/health`, {
       signal: AbortSignal.timeout(600),
     })
     if (res.ok) {
+      let data: { stats?: { memoryCount?: number; projectCount?: number } } = {}
+      try {
+        data = (await res.json()) as typeof data
+      } catch {}
       serverActive = true
-      const data = (await res.json()) as {
-        stats?: { memoryCount?: number; projectCount?: number }
-      }
       memoryCount = data.stats?.memoryCount ?? 0
       projectCount = data.stats?.projectCount ?? 0
     }

@@ -398,9 +398,10 @@ export class VaultBridge {
   listMemoriesWithVectors(filter?: {
     projectId?: string
     category?: MemoryCategory
+    limit?: number
   }): MemoryWithVector[] {
     const clauses: string[] = []
-    const params: string[] = []
+    const params: (string | number)[] = []
 
     if (filter?.projectId && filter.projectId !== 'all') {
       clauses.push('m.project_id = ?')
@@ -412,13 +413,22 @@ export class VaultBridge {
     }
 
     const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
+    const limitSql =
+      typeof filter?.limit === 'number' && filter.limit > 0
+        ? 'LIMIT ?'
+        : ''
+    if (limitSql) {
+      params.push(Math.floor(filter!.limit!))
+    }
+
     const rows = this.db
       .prepare(
         `SELECT m.*, mv.embedding AS vector_blob
          FROM memories m
          LEFT JOIN memory_vectors mv ON mv.memory_id = m.id
          ${whereSql}
-         ORDER BY m.importance DESC, m.updated_at DESC`
+         ORDER BY m.importance DESC, m.updated_at DESC
+         ${limitSql}`
       )
       .all(...params) as unknown as RawMemoryRow[]
 

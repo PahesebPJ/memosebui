@@ -192,7 +192,7 @@ export async function startMemosebuiDaemon(
   const url = `http://127.0.0.1:${port}`
 
   try {
-    const res = await fetch(`${url}/api/graph`, {
+    const res = await fetch(`${url}/api/health`, {
       signal: AbortSignal.timeout(400),
     })
     if (res.ok) {
@@ -234,14 +234,14 @@ export async function startMemosebuiDaemon(
   child.unref()
 
   const startTime = Date.now()
-  while (Date.now() - startTime < 1400) {
+  while (Date.now() - startTime < 2500) {
     try {
-      const ping = await fetch(`${url}/api/graph`, {
-        signal: AbortSignal.timeout(180),
+      const ping = await fetch(`${url}/api/health`, {
+        signal: AbortSignal.timeout(250),
       })
       if (ping.ok) break
     } catch {
-      await new Promise((r) => setTimeout(r, 150))
+      await new Promise((r) => setTimeout(r, 120))
     }
   }
 

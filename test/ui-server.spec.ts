@@ -42,11 +42,21 @@ describe('UI Server & Hubseb Topology Registration', () => {
     })
 
     try {
-      // 1. HTML & CSS
+      // 1. Health, HTML & CSS (no macOS traffic lights)
+      const healthRes = await fetch(`${instance.url}/api/health`)
+      assert.equal(healthRes.status, 200)
+      const health = (await healthRes.json()) as {
+        status: string
+        stats: { memoryCount: number }
+      }
+      assert.equal(health.status, 'ok')
+      assert.equal(health.stats.memoryCount, 0)
+
       const htmlRes = await fetch(`${instance.url}/`)
       assert.equal(htmlRes.status, 200)
       const html = await htmlRes.text()
       assert.ok(html.includes('memosebui'))
+      assert.equal(html.includes('traffic-lights'), false)
 
       const cssRes = await fetch(`${instance.url}/styles/mind.css`)
       assert.equal(cssRes.status, 200)
@@ -70,7 +80,19 @@ describe('UI Server & Hubseb Topology Registration', () => {
       }
       assert.equal(createdData.memory.title, 'Interactive Node Animations')
 
-      // 3. Fetch graph via GET /api/graph
+      // 3. Fetch graph via GET /api/graph & single memory via GET /api/memories/:id
+      const singleRes = await fetch(
+        `${instance.url}/api/memories/${createdData.memory.id}`
+      )
+      assert.equal(singleRes.status, 200)
+      const singleData = (await singleRes.json()) as {
+        memory: { id: string; title: string }
+      }
+      assert.equal(singleData.memory.id, createdData.memory.id)
+
+      const missingRes = await fetch(`${instance.url}/api/memories/nonexistent-id`)
+      assert.equal(missingRes.status, 404)
+
       const graphRes = await fetch(`${instance.url}/api/graph`)
       assert.equal(graphRes.status, 200)
       const graph = (await graphRes.json()) as {

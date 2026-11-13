@@ -7,9 +7,62 @@ import {
   type MindGraphSnapshot,
   type RelatedMemoryLink,
 } from '../types/mind.ts'
-import { cosineSimilarity, type VaultBridge } from './vault-bridge.ts'
+import type { VaultBridge } from './vault-bridge.ts'
 
 const STOP_TAGS = new Set(['overview', 'general', 'default'])
+
+function computeInvNorm(vec: Float32Array | null): number {
+  if (!vec || vec.length === 0) return 0
+  let sum = 0
+  for (let k = 0; k < vec.length; k++) {
+    const v = vec[k]!
+    sum += v * v
+  }
+  return sum > 0 ? 1 / Math.sqrt(sum) : 0
+}
+
+function fastCosine(
+  a: Float32Array,
+  b: Float32Array,
+  invNormA: number,
+  invNormB: number
+): number {
+  if (invNormA === 0 || invNormB === 0) return 0
+  const len = a.length < b.length ? a.length : b.length
+  let dot = 0
+  for (let k = 0; k < len; k++) {
+    dot += a[k]! * b[k]!
+  }
+  const sim = dot * invNormA * invNormB
+  return sim > 0 ? sim : 0
+}
+
+function insertTopRelated(
+  list: RelatedMemoryLink[],
+  item: RelatedMemoryLink,
+  maxItems = 8
+): void {
+  if (list.length < maxItems) {
+    list.push(item)
+    if (list.length === maxItems) {
+      list.sort((x, y) => y.similarity - x.similarity)
+    }
+    return
+  }
+  if (item.similarity <= list[maxItems - 1]!.similarity) {
+    return
+  }
+  list[maxItems - 1] = item
+  for (let k = maxItems - 1; k > 0; k--) {
+    if (list[k]!.similarity > list[k - 1]!.similarity) {
+      const tmp = list[k - 1]!
+      list[k - 1] = list[k]!
+      list[k] = tmp
+    } else {
+      break
+    }
+  }
+}
 
 export function buildMindGraph(
   bridge: VaultBridge,
@@ -28,6 +81,7 @@ export function buildMindGraph(
   const memoriesWithVectors = bridge.listMemoriesWithVectors({
     projectId: options?.projectId,
     category: options?.category,
+    limit: options?.maxMemoryNodes,
   })
 
   const activeProjectIds = new Set<string>(
@@ -153,13 +207,49 @@ export function buildMindGraph(
     }
   }
 
-  // Pairwise semantic similarity & shared tags
+  // Pairwise semantic similarity & shared tags (optimized with precomputed norms & inverted tag index)
   const relatedByMemoryId: Record<string, RelatedMemoryLink[]> = {}
-  for (const mem of memoriesWithVectors) {
-    relatedByMemoryId[mem.id] = []
+  const pairCount = memoriesWithVectors.length
+  const invNorms = new Float64Array(pairCount)
+  const tagIndex = new Map<string, number[]>()
+
+  for (let i = 0; i < pairCount; i++) {
+    const m = memoriesWithVectors[i]!
+    relatedByMemoryId[m.id] = []
+    invNorms[i] = computeInvNorm(m.vector)
+    const seenTags = new Set<string>()
+    for (const rawTag of m.tags) {
+      const t = rawTag.toLowerCase()
+      if (STOP_TAGS.has(t) || t === m.category || t === m.projectId || seenTags.has(t)) continue
+      seenTags.add(t)
+      let bucket = tagIndex.get(t)
+      if (!bucket) {
+        bucket = []
+        tagIndex.set(t, bucket)
+      }
+      bucket.push(i)
+    }
   }
 
-  const pairCount = memoriesWithVectors.length
+  // Build shared-tag map in O(sum(bucket^2)) for non-stop tags (skip huge tags > 200 entries)
+  const sharedTagsByPair = new Map<number, string[]>()
+  for (const [tag, indices] of tagIndex.entries()) {
+    if (indices.length < 2 || indices.length > 200) continue
+    for (let aIdx = 0; aIdx < indices.length; aIdx++) {
+      const i = indices[aIdx]!
+      for (let bIdx = aIdx + 1; bIdx < indices.length; bIdx++) {
+        const j = indices[bIdx]!
+        const key = i * pairCount + j
+        let arr = sharedTagsByPair.get(key)
+        if (!arr) {
+          arr = []
+          sharedTagsByPair.set(key, arr)
+        }
+        arr.push(tag)
+      }
+    }
+  }
+
   const semanticCandidates: Array<{
     a: (typeof memoriesWithVectors)[number]
     b: (typeof memoriesWithVectors)[number]
@@ -167,13 +257,12 @@ export function buildMindGraph(
     sharedTags: string[]
   }> = []
 
+  const relatedThreshold = 0.22
   for (let i = 0; i < pairCount; i++) {
     const a = memoriesWithVectors[i]!
-    const tagsA = new Set(
-      a.tags
-        .map((t) => t.toLowerCase())
-        .filter((t) => !STOP_TAGS.has(t) && t !== a.category && t !== a.projectId)
-    )
+    const vecA = a.vector
+    const invA = invNorms[i]!
+    const rowBase = i * pairCount
 
     for (let j = i + 1; j < pairCount; j++) {
       const b = memoriesWithVectors[j]!
@@ -181,23 +270,13 @@ export function buildMindGraph(
         continue
       }
 
-      const similarity =
-        a.vector && b.vector
-          ? Number(Math.max(0, cosineSimilarity(a.vector, b.vector)).toFixed(4))
-          : 0
+      const rawSim =
+        vecA && b.vector ? fastCosine(vecA, b.vector, invA, invNorms[j]!) : 0
+      const sharedTags = sharedTagsByPair.get(rowBase + j) ?? []
 
-      const sharedTags: string[] = []
-      if (tagsA.size > 0) {
-        for (const t of b.tags) {
-          const lower = t.toLowerCase()
-          if (tagsA.has(lower)) {
-            sharedTags.push(lower)
-          }
-        }
-      }
-
-      if (similarity >= 0.22 || sharedTags.length > 0) {
-        relatedByMemoryId[a.id]!.push({
+      if (rawSim >= relatedThreshold || sharedTags.length > 0) {
+        const similarity = Math.round(rawSim * 10000) / 10000
+        insertTopRelated(relatedByMemoryId[a.id]!, {
           memoryId: b.id,
           title: b.title,
           projectId: b.projectId,
@@ -205,7 +284,7 @@ export function buildMindGraph(
           similarity,
           sharedTags,
         })
-        relatedByMemoryId[b.id]!.push({
+        insertTopRelated(relatedByMemoryId[b.id]!, {
           memoryId: a.id,
           title: a.title,
           projectId: a.projectId,
@@ -213,18 +292,23 @@ export function buildMindGraph(
           similarity,
           sharedTags,
         })
-      }
 
-      if (similarity >= minSimilarity || (includeSharedTags && sharedTags.length >= 2)) {
-        semanticCandidates.push({ a, b, similarity, sharedTags })
+        if (
+          similarity >= minSimilarity ||
+          (includeSharedTags && sharedTags.length >= 2)
+        ) {
+          semanticCandidates.push({ a, b, similarity, sharedTags })
+        }
       }
     }
   }
 
-  // Sort related memories per memory by similarity descending
+  // Ensure remaining (<8) related lists are sorted descending
   for (const id of Object.keys(relatedByMemoryId)) {
-    relatedByMemoryId[id]!.sort((x, y) => y.similarity - x.similarity)
-    relatedByMemoryId[id] = relatedByMemoryId[id]!.slice(0, 8)
+    const list = relatedByMemoryId[id]!
+    if (list.length > 1 && list.length < 8) {
+      list.sort((x, y) => y.similarity - x.similarity)
+    }
   }
 
   // Cap semantic edges per node so the force layout stays clean and legible
@@ -268,6 +352,14 @@ export function buildMindGraph(
     ({ vector: _vector, ...rec }) => rec
   )
 
+  const truncated = Boolean(
+    options?.maxMemoryNodes &&
+      options.maxMemoryNodes > 0 &&
+      memories.length < stats.memoryCount &&
+      (!options.projectId || options.projectId === 'all') &&
+      !options.category
+  )
+
   return {
     generatedAt: new Date().toISOString(),
     stats,
@@ -276,6 +368,8 @@ export function buildMindGraph(
     relatedByMemoryId,
     nodes,
     edges,
+    truncated,
+    totalAvailableMemories: stats.memoryCount,
     p2p: {
       nodeConfig: bridge.getNodeConfig(),
       peers: bridge.listPeers(),
