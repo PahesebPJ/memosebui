@@ -217,9 +217,11 @@ export function buildMindGraph(
     const m = memoriesWithVectors[i]!
     relatedByMemoryId[m.id] = []
     invNorms[i] = computeInvNorm(m.vector)
+    const seenTags = new Set<string>()
     for (const rawTag of m.tags) {
       const t = rawTag.toLowerCase()
-      if (STOP_TAGS.has(t) || t === m.category || t === m.projectId) continue
+      if (STOP_TAGS.has(t) || t === m.category || t === m.projectId || seenTags.has(t)) continue
+      seenTags.add(t)
       let bucket = tagIndex.get(t)
       if (!bucket) {
         bucket = []

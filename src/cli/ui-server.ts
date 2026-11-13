@@ -768,6 +768,8 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         ctx.restore();
 
         // Draw only highlighted edges individually
+        const accentStroke = isLight ? '#65A30D' : '#B8DF52';
+        const secondaryStroke = isLight ? '#0284C7' : '#67E8F9';
         for (let i = 0; i < highlightedEdges.length; i++) {
           const e = highlightedEdges[i];
           const s = e.sourceNode;
@@ -775,7 +777,7 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
           ctx.beginPath();
           ctx.moveTo(s.x, s.y);
           ctx.lineTo(t.x, t.y);
-          ctx.strokeStyle = e.kind === 'semantic-similarity' ? '#B8DF52' : '#67E8F9';
+          ctx.strokeStyle = e.kind === 'semantic-similarity' ? accentStroke : secondaryStroke;
           ctx.lineWidth = 2.0;
           ctx.stroke();
           if (e.label) {
@@ -859,7 +861,9 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
             const pulse = Math.sin(frameTick + (n.phase || 0)) * 2.0;
             ctx.beginPath();
             ctx.arc(n.x, n.y, n.radius + 5 + Math.max(0, pulse), 0, Math.PI * 2);
-            ctx.fillStyle = isFocused || searchHit ? 'rgba(184, 223, 82, 0.24)' : n.color + '24';
+            ctx.fillStyle = isFocused || searchHit
+              ? (isLight ? 'rgba(101, 163, 13, 0.22)' : 'rgba(184, 223, 82, 0.24)')
+              : n.color + '24';
             ctx.fill();
           }
 
@@ -871,7 +875,9 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
 
           if (isFocused || searchHit || n.type === 'project') {
             ctx.lineWidth = isFocused ? 2.6 : searchHit ? 2.2 : 1.4;
-            ctx.strokeStyle = isFocused || searchHit ? '#B8DF52' : 'rgba(255,255,255,0.35)';
+            ctx.strokeStyle = isFocused || searchHit
+              ? (isLight ? '#4D7C0F' : '#B8DF52')
+              : (isLight ? 'rgba(17,24,39,0.28)' : 'rgba(255,255,255,0.35)');
             ctx.stroke();
           }
 
@@ -966,11 +972,13 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
         const hit = findNodeAt(pt.x, pt.y);
         if (hit) {
           hit.pinned = !hit.pinned;
+          if (!hit.pinned) simAlpha = Math.max(simAlpha, 0.25);
         }
       });
 
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
+        if (e.deltaY === 0) return;
         const factor = e.deltaY < 0 ? 1.12 : 0.89;
         targetCamScale = Math.min(3.2, Math.max(0.28, targetCamScale * factor));
       }, { passive: false });

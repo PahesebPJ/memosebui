@@ -84,6 +84,27 @@ describe('GraphBuilder', () => {
     assert.equal(sliced.truncated, true)
     assert.equal(sliced.totalAvailableMemories, 600)
 
+    // Verify duplicate/mixed-case tags within the same memory do not inflate shared-tag edges
+    const dupBridge = new VaultBridge({ dbPath: ':memory:' })
+    dupBridge.createMemory({
+      projectId: 'p1',
+      category: 'domain',
+      title: 'Alpha',
+      content: 'Unique alpha content one',
+      tags: ['SQLite', 'sqlite'],
+    })
+    dupBridge.createMemory({
+      projectId: 'p2',
+      category: 'bugfix',
+      title: 'Beta',
+      content: 'Completely unrelated beta text two',
+      tags: ['sqlite'],
+    })
+    const dupGraph = buildMindGraph(dupBridge, { minSimilarity: 0.9 })
+    const sharedTagEdges = dupGraph.edges.filter((e) => e.kind === 'shared-tag')
+    assert.equal(sharedTagEdges.length, 0)
+    dupBridge.close()
+
     bridge.close()
   })
 })

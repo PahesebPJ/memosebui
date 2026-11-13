@@ -537,7 +537,16 @@ html, body {
   flex-shrink: 0;
 }
 
-/* --- Modals & P2P Overlay --- */
+[data-theme="light"] .tag-pill {
+  background: rgba(101, 163, 13, 0.12);
+  border-color: rgba(101, 163, 13, 0.35);
+  color: #3F6212;
+}
+
+[data-theme="light"] .sim-pill {
+  background: rgba(101, 163, 13, 0.14);
+  color: #3F6212;
+}
 .modal-backdrop {
   position: fixed;
   inset: 0;

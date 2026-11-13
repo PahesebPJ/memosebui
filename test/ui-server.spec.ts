@@ -45,8 +45,12 @@ describe('UI Server & Hubseb Topology Registration', () => {
       // 1. Health, HTML & CSS (no macOS traffic lights)
       const healthRes = await fetch(`${instance.url}/api/health`)
       assert.equal(healthRes.status, 200)
-      const health = (await healthRes.json()) as { status: string }
+      const health = (await healthRes.json()) as {
+        status: string
+        stats: { memoryCount: number }
+      }
       assert.equal(health.status, 'ok')
+      assert.equal(health.stats.memoryCount, 0)
 
       const htmlRes = await fetch(`${instance.url}/`)
       assert.equal(htmlRes.status, 200)
@@ -85,6 +89,9 @@ describe('UI Server & Hubseb Topology Registration', () => {
         memory: { id: string; title: string }
       }
       assert.equal(singleData.memory.id, createdData.memory.id)
+
+      const missingRes = await fetch(`${instance.url}/api/memories/nonexistent-id`)
+      assert.equal(missingRes.status, 404)
 
       const graphRes = await fetch(`${instance.url}/api/graph`)
       assert.equal(graphRes.status, 200)
