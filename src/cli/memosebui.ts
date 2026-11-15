@@ -6,6 +6,7 @@ import {
   startMemosebuiDaemon,
   stopMemosebuiDaemon,
   unregisterMemosebuiNode,
+  capabilitiesPacket,
 } from './setup.ts'
 import {
   isMemosebuiServerRunning,
@@ -125,6 +126,13 @@ async function main(): Promise<void> {
   const jsonMode = args.includes('--json')
   const port = extractPort(args, 4322)
   const initialProject = extractProject(args)
+
+  if (firstArg === 'capabilities' || firstArg === 'ping') {
+    const packet = capabilitiesPacket(firstArg)
+    if (jsonMode) console.log(JSON.stringify(packet))
+    else console.log(`${BUNDLE_ID} v${VERSION} [provides: ${packet.payload.provides.join(', ')}]`)
+    return
+  }
 
   if (firstArg === '--help' || firstArg === '-h' || firstArg === 'help') {
     printHelp()

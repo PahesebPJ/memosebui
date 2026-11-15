@@ -1,6 +1,6 @@
 [package]
 name = "memosebui-backend"
-version = "0.1.0"
+version = "0.1.1"
 description = "Native desktop backend and graph IPC router for memosebui"
 authors = ["PahesebPJ"]
 edition = "2021"

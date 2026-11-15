@@ -274,3 +274,23 @@ export async function stopMemosebuiDaemon(): Promise<boolean> {
 
   return stopped
 }
+
+/**
+ * hubseb/v1 envelope answered to `capabilities`/`ping`; `hubseb doctor` calls
+ * `<node> capabilities --json` and decodes this packet to verify the node.
+ */
+export function capabilitiesPacket(action: 'capabilities' | 'ping' = 'capabilities') {
+  return {
+    protocol: 'hubseb/v1' as const,
+    status: 'success' as const,
+    action,
+    ts: Date.now(),
+    payload: {
+      id: BUNDLE_ID,
+      version: VERSION,
+      provides: [...PROVIDES],
+      consumes: [...CONSUMES],
+      signals: [...SIGNALS],
+    },
+  }
+}
