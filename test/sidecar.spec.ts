@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs/promises'
+import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -22,9 +23,10 @@ function killSpawned(): void {
 
 async function spawnSidecar(
   home: string,
-  env: NodeJS.ProcessEnv = {}
+  env: NodeJS.ProcessEnv = {},
+  extraArgs: string[] = []
 ): Promise<{ child: ChildProcessWithoutNullStreams; ready: SidecarReadyEvent }> {
-  const child = spawn(process.execPath, [CLI, 'sidecar'], {
+  const child = spawn(process.execPath, [CLI, 'sidecar', ...extraArgs], {
     cwd: home,
     env: { ...process.env, HOME: home, USERPROFILE: home, MEMOSEB_DB_PATH: path.join(home, 'vault.sqlite'), ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -154,6 +156,55 @@ describe('memosebui sidecar mode', () => {
     child.stdin.end()
     assert.equal(await exited, 0)
     socket.destroy()
+  })
+
+  it('fails without a ready line when the vault cannot be opened', { timeout: 20_000 }, async () => {
+    const home = await makeTempDir('memosebui-sidecar-home-')
+    // A directory where the database file should be: SQLite cannot open it.
+    const child = spawn(process.execPath, [CLI, 'sidecar'], {
+      cwd: home,
+      env: { ...process.env, HOME: home, USERPROFILE: home, MEMOSEB_DB_PATH: home },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    spawned.add(child)
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => (stdout += chunk.toString()))
+    child.stderr.on('data', (chunk) => (stderr += chunk.toString()))
+    const code = await exitWithin(child, 10_000)
+    assert.notEqual(code, 0)
+    assert.equal(stdout, '', 'the shell must never see a ready line for a broken vault')
+    assert.match(stderr, /database/i)
+  })
+
+  it('keeps the request guards on its ephemeral port', { timeout: 20_000 }, async () => {
+    const home = await makeTempDir('memosebui-sidecar-home-')
+    const { child, ready } = await spawnSidecar(home)
+    const status = await new Promise<number>((resolve, reject) => {
+      const req = http.request(
+        { host: '127.0.0.1', port: ready.port, path: '/api/search?q=x', headers: { Host: `attacker.example:${ready.port}` } },
+        (res) => {
+          res.resume()
+          resolve(res.statusCode ?? 0)
+        }
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    assert.equal(status, 403)
+    const exited = exitWithin(child, 5_000)
+    child.stdin.end()
+    assert.equal(await exited, 0)
+  })
+
+  it('passes --project through to the viewer', { timeout: 20_000 }, async () => {
+    const home = await makeTempDir('memosebui-sidecar-home-')
+    const { child, ready } = await spawnSidecar(home, {}, ['--project', 'my-project'])
+    const html = await (await fetch(`${ready.url}/`)).text()
+    assert.match(html, /INITIAL_PROJECT = "my-project"/)
+    const exited = exitWithin(child, 5_000)
+    child.stdin.end()
+    assert.equal(await exited, 0)
   })
 
   it(
