@@ -12,7 +12,7 @@ const sources = {
   'src/version.ts': read('src/version.ts').match(/export const VERSION = '([^']+)'/)?.[1],
   'src-tauri/Cargo.toml': read('src-tauri/Cargo.toml').match(/^\[package\][^[]*?^version = "([^"]+)"/ms)?.[1],
   // A stale lock breaks `cargo test --locked` in CI even when Cargo.toml was bumped.
-  'src-tauri/Cargo.lock': read('src-tauri/Cargo.lock').match(/name = "memosebui-desktop"\nversion = "([^"]+)"/)?.[1],
+  'src-tauri/Cargo.lock': read('src-tauri/Cargo.lock').match(/name = "memosebui-desktop"\r?\nversion = "([^"]+)"/)?.[1],
 }
 
 const tauriVersion = JSON.parse(read('src-tauri/tauri.conf.json')).version
