@@ -1,8 +1,8 @@
 name: release-desktop
 
+# Manual only until the Tauri backend exists (src-tauri/Cargo.toml declares no dependencies yet);
+# on every release it failed and turned the release red.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
