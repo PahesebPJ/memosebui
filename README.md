@@ -28,6 +28,30 @@ memosebui ui
 memosebui status
 ```
 
+## 🖥️ App de Escritorio Nativa (Tauri)
+
+Instalables para Linux (`.deb`, `.rpm`, `.AppImage`), macOS (`.dmg`) y Windows (`.msi`, `-setup.exe`) que **no necesitan Node instalado**. La app es un envoltorio Tauri 2 que lanza el propio CLI, empaquetado como ejecutable Node SEA, en modo `memosebui sidecar` (puerto efímero en `127.0.0.1`), y muestra el mismo visor en una ventana nativa. Usa la misma bóveda que `memoseb` (`MEMOSEB_DB_PATH` o el directorio de datos de la plataforma). Al cerrar la ventana, el servidor se detiene.
+
+Los instaladores se adjuntan a cada GitHub Release.
+
+> [!WARNING]
+> Los binarios aún no están firmados: macOS (Gatekeeper) y Windows (SmartScreen) mostrarán un aviso de app no verificada la primera vez.
+
+Compilación local (requiere Rust stable y, en Linux, `webkit2gtk-4.1` y `libayatana-appindicator`):
+
+```sh
+npm ci
+npm run tauri build   # ejecuta npm run build:sidecar y genera los instalables en src-tauri/target/release/bundle/
+```
+
+Verificación del envoltorio (el sidecar debe estar compilado antes de cualquier comando `cargo`):
+
+```sh
+npm run build:sidecar
+node scripts/smoke-sidecar.mjs src-tauri/binaries/memosebui-server-<target-triple>
+(cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test)
+```
+
 ## 🔒 Seguridad de la API local
 
 El daemon escucha solo en `127.0.0.1:4322` y atiende únicamente al propio visor (mismo origen) y al CLI. Así, ninguna web abierta en el navegador puede leer la bóveda ni inyectar memorias:
