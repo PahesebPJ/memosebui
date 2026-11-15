@@ -4,23 +4,31 @@
 //! `{"event":"ready","url":...}` line and points the window at that loopback URL. All viewer
 //! logic lives in the TypeScript server, so the CLI and the desktop app never diverge.
 
+use std::io::{BufRead, BufReader};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
-use tauri_plugin_shell::ShellExt;
 
 const SIDECAR_BIN: &str = "memosebui-server";
 const READY_TIMEOUT: Duration = Duration::from_secs(30);
+/// Time the sidecar gets to close its server (and the database) after stdin closes.
+const SHUTDOWN_GRACE: Duration = Duration::from_millis(1500);
+const STDERR_TAIL_LINES: usize = 8;
 
+/// The sidecar is spawned with std::process instead of tauri-plugin-shell: that plugin injects a
+/// script into every page, including the remote viewer, that cancels target=_blank link clicks
+/// and calls an IPC command the viewer is not allowed to use, so plan links never opened.
 #[derive(Default)]
 struct SidecarState {
-    child: Mutex<Option<CommandChild>>,
+    child: Arc<Mutex<Option<Child>>>,
+    stdin: Mutex<Option<ChildStdin>>,
     exiting: AtomicBool,
 }
 
@@ -102,28 +110,79 @@ fn fail_startup(app: &AppHandle, window: &WebviewWindow, startup: &Startup, mess
     kill_sidecar(app);
 }
 
+/// Closing stdin asks the sidecar to shut down cleanly; it is killed if it has not exited in time.
 fn kill_sidecar(app: &AppHandle) {
     let state = app.state::<SidecarState>();
     state.exiting.store(true, Ordering::SeqCst);
-    if let Some(child) = state.child.lock().ok().and_then(|mut guard| guard.take()) {
-        let _ = child.kill();
+    drop(state.stdin.lock().ok().and_then(|mut guard| guard.take()));
+    let deadline = Instant::now() + SHUTDOWN_GRACE;
+    loop {
+        let Ok(mut guard) = state.child.lock() else { return };
+        let Some(child) = guard.as_mut() else { return };
+        if matches!(child.try_wait(), Ok(Some(_))) || Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            *guard = None;
+            return;
+        }
+        drop(guard);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Same location Tauri's bundler installs `externalBin` to: next to the shell executable.
+fn sidecar_path() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| std::io::Error::other("the executable has no parent directory"))?;
+    Ok(dir.join(format!("{SIDECAR_BIN}{}", std::env::consts::EXE_SUFFIX)))
+}
+
+fn spawn_sidecar() -> std::io::Result<Child> {
+    let mut command = Command::new(sidecar_path()?);
+    command
+        .arg("sidecar")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command.spawn()
+}
+
+fn push_tail(tail: &Mutex<Vec<String>>, line: String) {
+    if let Ok(mut tail) = tail.lock() {
+        tail.push(line);
+        if tail.len() > STDERR_TAIL_LINES {
+            tail.remove(0);
+        }
     }
 }
 
 fn start_sidecar(app: &AppHandle, window: WebviewWindow, startup: Arc<Startup>) {
-    let spawned = app
-        .shell()
-        .sidecar(SIDECAR_BIN)
-        .and_then(|command| command.args(["sidecar"]).spawn());
-
-    let (mut events, child) = match spawned {
-        Ok(pair) => pair,
+    let mut child = match spawn_sidecar() {
+        Ok(child) => child,
         Err(err) => {
             fail_startup(app, &window, &startup, &format!("No se pudo lanzar {SIDECAR_BIN}: {err}"));
             return;
         }
     };
-    if let Ok(mut guard) = app.state::<SidecarState>().child.lock() {
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        let _ = child.kill();
+        fail_startup(app, &window, &startup, "No se pudo leer la salida del servidor.");
+        return;
+    };
+    let state = app.state::<SidecarState>();
+    if let Ok(mut guard) = state.stdin.lock() {
+        *guard = child.stdin.take();
+    }
+    let child_slot = state.child.clone();
+    if let Ok(mut guard) = child_slot.lock() {
         *guard = Some(child);
     }
 
@@ -138,45 +197,64 @@ fn start_sidecar(app: &AppHandle, window: WebviewWindow, startup: Arc<Startup>) 
         });
     }
 
-    let app = app.clone();
-    // Drain every event, even after `ready`, so the sidecar never blocks on a full stdout pipe.
-    tauri::async_runtime::spawn(async move {
-        let mut stderr_tail: Vec<String> = Vec::new();
-        while let Some(event) = events.recv().await {
-            match event {
-                CommandEvent::Stdout(line) => {
-                    let Some(url) = parse_ready(&line) else { continue };
-                    if startup.advance(Phase::Ready) {
-                        let _ = startup.server.set(url.clone());
-                        if let Err(err) = window.navigate(url) {
-                            eprintln!("[memosebui-desktop] navigation to sidecar failed: {err}");
-                        }
+    // Drain stdout to EOF, even after `ready`, so the sidecar never blocks on a full pipe.
+    {
+        let window = window.clone();
+        let startup = startup.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stdout).split(b'\n').map_while(Result::ok) {
+                let Some(url) = parse_ready(&line) else { continue };
+                if startup.advance(Phase::Ready) {
+                    let _ = startup.server.set(url.clone());
+                    if let Err(err) = window.navigate(url) {
+                        eprintln!("[memosebui-desktop] navigation to sidecar failed: {err}");
                     }
                 }
-                CommandEvent::Stderr(line) => {
-                    let line = String::from_utf8_lossy(&line).trim_end().to_string();
-                    eprintln!("[memosebui-server] {line}");
-                    stderr_tail.push(line);
-                    if stderr_tail.len() > 8 {
-                        stderr_tail.remove(0);
-                    }
-                }
-                CommandEvent::Terminated(payload) => {
-                    if !app.state::<SidecarState>().exiting.load(Ordering::SeqCst) {
-                        let code = payload.code.map_or_else(|| "señal".to_string(), |c| c.to_string());
-                        let message =
-                            format!("El servidor se detuvo (código {code}).\n{}", stderr_tail.join("\n"));
-                        // A crash after `ready` must still surface, so this overrides any phase.
-                        startup.phase.store(Phase::Failed as u8, Ordering::SeqCst);
-                        eprintln!("[memosebui-desktop] sidecar exited with code {code}");
-                        let _ = window.navigate(error_page(&message));
-                    }
-                    break;
-                }
-                CommandEvent::Error(err) => eprintln!("[memosebui-desktop] sidecar event error: {err}"),
-                _ => {}
             }
+        });
+    }
+
+    let stderr_tail = Arc::new(Mutex::new(Vec::new()));
+    let stderr_reader = {
+        let stderr_tail = stderr_tail.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(stderr).split(b'\n').map_while(Result::ok) {
+                let line = String::from_utf8_lossy(&line).trim_end().to_string();
+                eprintln!("[memosebui-server] {line}");
+                push_tail(&stderr_tail, line);
+            }
+        })
+    };
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let status = loop {
+            let Ok(mut guard) = child_slot.lock() else { return };
+            match guard.as_mut().map(Child::try_wait) {
+                // kill_sidecar already reaped it: this is a deliberate shutdown.
+                None => return,
+                Some(Ok(Some(status))) => break status,
+                Some(Ok(None)) => {}
+                Some(Err(err)) => {
+                    eprintln!("[memosebui-desktop] could not poll the sidecar: {err}");
+                    return;
+                }
+            }
+            drop(guard);
+            std::thread::sleep(Duration::from_millis(200));
+        };
+        if app.state::<SidecarState>().exiting.load(Ordering::SeqCst) {
+            return;
         }
+        // stderr reaches EOF once the process is gone; join so the tail is complete.
+        let _ = stderr_reader.join();
+        let code = status.code().map_or_else(|| "señal".to_string(), |c| c.to_string());
+        let tail = stderr_tail.lock().map(|t| t.join("\n")).unwrap_or_default();
+        let message = format!("El servidor se detuvo (código {code}).\n{tail}");
+        // A crash after `ready` must still surface, so this overrides any phase.
+        startup.phase.store(Phase::Failed as u8, Ordering::SeqCst);
+        eprintln!("[memosebui-desktop] sidecar exited with code {code}");
+        let _ = window.navigate(error_page(&message));
     });
 }
 
@@ -189,7 +267,6 @@ fn main() {
     }
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         // The default init() injects a click handler into every page, including the remote viewer,
         // that swallows target=_blank clicks and calls an IPC command the viewer has no permission
         // for. External links already go through on_navigation/on_new_window below.
