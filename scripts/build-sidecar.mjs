@@ -25,11 +25,14 @@ function hostTargetTriple() {
 
 function run(cmd, args) {
   console.log(`$ ${cmd} ${args.join(' ')}`)
-  execFileSync(cmd, args, { stdio: 'inherit', cwd: root, shell: isWindows && cmd === 'npx' })
+  execFileSync(cmd, args, { stdio: 'inherit', cwd: root })
 }
 
 const [major, minor] = process.versions.node.split('.').map(Number)
-if (major < 22) throw new Error(`Node >= 22 is required to build the sidecar (found ${process.version})`)
+// node:sqlite (the vault) is available without a flag from Node 22.13.
+if (major < 22 || (major === 22 && minor < 13)) {
+  throw new Error(`Node >= 22.13 is required to build the sidecar (found ${process.version})`)
+}
 
 rmSync(workDir, { recursive: true, force: true })
 mkdirSync(workDir, { recursive: true })
@@ -82,9 +85,10 @@ if (hasBuildSea) {
   copyFileSync(process.execPath, outBinary)
   chmodSync(outBinary, 0o755)
   if (isMac) run('codesign', ['--remove-signature', outBinary])
+  // Run the local postject CLI with this Node directly: no npx and no shell, so paths with spaces
+  // or cmd.exe metacharacters cannot break (or inject into) the Windows build.
   const postjectArgs = [
-    '--no-install',
-    'postject',
+    path.join(root, 'node_modules', 'postject', 'dist', 'cli.js'),
     outBinary,
     'NODE_SEA_BLOB',
     blobPath,
@@ -92,7 +96,7 @@ if (hasBuildSea) {
     'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
   ]
   if (isMac) postjectArgs.push('--macho-segment-name', 'NODE_SEA')
-  run('npx', postjectArgs)
+  run(process.execPath, postjectArgs)
 }
 
 // macOS refuses to run modified binaries without a (possibly ad-hoc) signature.

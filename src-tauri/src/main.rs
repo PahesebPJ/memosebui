@@ -190,7 +190,14 @@ fn main() {
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_opener::init())
+        // The default init() injects a click handler into every page, including the remote viewer,
+        // that swallows target=_blank clicks and calls an IPC command the viewer has no permission
+        // for. External links already go through on_navigation/on_new_window below.
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .manage(SidecarState::default())
         .setup(|app| {
             let startup = Arc::new(Startup::default());
