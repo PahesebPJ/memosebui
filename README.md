@@ -32,7 +32,10 @@ memosebui status
 
 Instalables para Linux (`.deb`, `.rpm`, `.AppImage`), macOS (`.dmg`) y Windows (`.msi`, `-setup.exe`) que **no necesitan Node instalado**. La app es un envoltorio Tauri 2 que lanza el propio CLI, empaquetado como ejecutable Node SEA, en modo `memosebui sidecar` (puerto efímero en `127.0.0.1`), y muestra el mismo visor en una ventana nativa. Usa la misma bóveda que `memoseb` (`MEMOSEB_DB_PATH` o el directorio de datos de la plataforma). Al cerrar la ventana, el servidor se detiene.
 
-Los instaladores se adjuntan a cada GitHub Release.
+Los instaladores se adjuntan a cada GitHub Release, junto con un `SHA256SUMS` para verificarlos.
+
+> [!NOTE]
+> Si abres la app desde el menú del sistema o el Dock, no hereda las variables de tu shell. Si usas `MEMOSEB_DB_PATH` para una bóveda no estándar, lanza la app desde una terminal con esa variable definida o configúrala en el entorno de tu sesión gráfica.
 
 > [!WARNING]
 > Los binarios aún no están firmados: macOS (Gatekeeper) y Windows (SmartScreen) mostrarán un aviso de app no verificada la primera vez.

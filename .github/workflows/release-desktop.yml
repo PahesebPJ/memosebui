@@ -117,6 +117,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
+        # Only installer types are uploaded: anything else a compromised build dependency dropped
+        # into the artifacts is ignored. SHA256SUMS lets users verify the unsigned installers.
         run: |
-          find installers -type f -print
-          find installers -type f -print0 | xargs -0 gh release upload "$TAG" --clobber --repo "$GITHUB_REPOSITORY"
+          set -euo pipefail
+          mkdir upload
+          find installers -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+            -o -name '*.dmg' -o -name '*.msi' -o -name '*-setup.exe' \) -exec cp {} upload/ \;
+          ls -l upload
+          test -n "$(ls upload)"
+          (cd upload && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+          gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
