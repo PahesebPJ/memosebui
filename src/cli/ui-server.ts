@@ -7,6 +7,17 @@ import { isMemoryCategory, VaultBridge } from '../core/vault-bridge.ts'
 import { VaultWatcher } from '../core/vault-watcher.ts'
 import type { MemoryCategory, MindGraphSnapshot } from '../types/mind.ts'
 import { BUNDLE_ID, PACKAGE_ROOT, VERSION } from '../version.ts'
+import {
+  firstHeader,
+  isAllowedFetchSite,
+  isAllowedHost,
+  isAllowedOrigin,
+  isJsonContentType,
+  isViewerNavigation,
+  MAX_BODY_BYTES,
+  RequestError,
+  SECURITY_HEADERS,
+} from './request-guard.ts'
 
 export interface UiServerOptions {
   port?: number
@@ -1366,27 +1377,59 @@ export function generateMemosebUiHtml(initialProject = 'all'): string {
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
+  if (!isJsonContentType(req.headers['content-type'])) {
+    throw new RequestError(415, 'Content-Type must be application/json')
+  }
   return new Promise((resolve, reject) => {
-    let raw = ''
-    req.on('data', (chunk) => {
-      raw += String(chunk)
-      if (raw.length > 1_000_000) {
-        reject(new Error('Payload too large'))
+    const chunks: Buffer[] = []
+    let bytes = 0
+    let settled = false
+    const fail = (err: Error) => {
+      if (settled) return
+      settled = true
+      reject(err)
+    }
+    req.on('data', (chunk: Buffer) => {
+      if (settled) return
+      bytes += chunk.length
+      if (bytes > MAX_BODY_BYTES) {
+        req.pause()
+        fail(new RequestError(413, 'Request body too large', true))
+        return
       }
+      chunks.push(chunk)
     })
     req.on('end', () => {
+      if (settled) return
+      settled = true
+      const raw = Buffer.concat(chunks).toString('utf8')
       if (!raw.trim()) {
         resolve({})
         return
       }
+      let parsed: unknown
       try {
-        resolve(JSON.parse(raw) as Record<string, unknown>)
-      } catch (err) {
-        reject(err)
+        parsed = JSON.parse(raw)
+      } catch {
+        reject(new RequestError(400, 'Request body is not valid JSON'))
+        return
       }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        reject(new RequestError(400, 'Request body must be a JSON object'))
+        return
+      }
+      resolve(parsed as Record<string, unknown>)
     })
-    req.on('error', reject)
+    req.on('error', fail)
   })
+}
+
+function decodeMemoryId(pathname: string): string {
+  try {
+    return decodeURIComponent(pathname.slice('/api/memories/'.length))
+  } catch {
+    throw new RequestError(400, 'Memory ID is not a valid percent-encoded string')
+  }
 }
 
 function sendJson(
@@ -1449,10 +1492,37 @@ export async function startUiServer(
   const cssPath = path.join(PACKAGE_ROOT, 'src', 'styles', 'mind.css')
 
   const server = http.createServer(async (req, res) => {
+    for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value)
     try {
-      const parsedUrl = new URL(req.url ?? '/', `http://${host}:${port}`)
+      const boundAddress = server.address()
+      const boundPort =
+        typeof boundAddress === 'object' && boundAddress !== null ? boundAddress.port : port
+      // No CORS headers on purpose: the viewer is same-origin and the CLI is not a browser.
+      if (
+        !isAllowedHost(req.headers.host, boundPort, host) ||
+        !isAllowedOrigin(req.headers.origin, boundPort, host) ||
+        (!isAllowedFetchSite(firstHeader(req.headers['sec-fetch-site'])) && !isViewerNavigation(req))
+      ) {
+        sendJson(res, 403, { error: 'Forbidden: cross-origin or foreign Host request' })
+        return
+      }
+
+      // Fixed base: targets like `//evil` would otherwise parse as authority-relative and throw.
+      let parsedUrl: URL
+      try {
+        parsedUrl = new URL(req.url ?? '/', 'http://localhost')
+      } catch {
+        sendJson(res, 400, { error: 'Bad Request' })
+        return
+      }
       const pathname = parsedUrl.pathname
       const method = req.method ?? 'GET'
+
+      if (method === 'OPTIONS') {
+        res.writeHead(405, { Allow: 'GET, POST, PUT, DELETE' })
+        res.end()
+        return
+      }
 
       if (method === 'GET' && pathname === '/') {
         const html = generateMemosebUiHtml(options?.initialProject ?? 'all')
@@ -1598,7 +1668,7 @@ export async function startUiServer(
       }
 
       if (method === 'GET' && pathname.startsWith('/api/memories/')) {
-        const id = decodeURIComponent(pathname.slice('/api/memories/'.length))
+        const id = decodeMemoryId(pathname)
         if (!id) {
           sendJson(res, 400, { error: 'Memory ID is required.' })
           return
@@ -1616,7 +1686,7 @@ export async function startUiServer(
         (method === 'PUT' || method === 'DELETE') &&
         pathname.startsWith('/api/memories/')
       ) {
-        const id = decodeURIComponent(pathname.slice('/api/memories/'.length))
+        const id = decodeMemoryId(pathname)
         if (!id) {
           sendJson(res, 400, { error: 'Memory ID is required.' })
           return
@@ -1688,6 +1758,19 @@ export async function startUiServer(
 
       sendJson(res, 404, { error: 'Not Found' })
     } catch (err) {
+      if (res.headersSent) {
+        res.end()
+        return
+      }
+      if (err instanceof RequestError) {
+        if (err.closeConnection) {
+          // Stop reading an oversized upload: answer, then drop the socket.
+          res.setHeader('Connection', 'close')
+          res.on('finish', () => req.destroy())
+        }
+        sendJson(res, err.status, { error: err.message })
+        return
+      }
       const message = err instanceof Error ? err.message : String(err)
       sendJson(res, 500, { error: message })
     }
@@ -1700,7 +1783,9 @@ export async function startUiServer(
 
   const addr = server.address()
   const actualPort = typeof addr === 'object' && addr ? addr.port : port
-  const url = `http://${host}:${actualPort}`
+  // A wildcard bind is reachable on loopback, and only loopback names pass the Host check.
+  const advertisedHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
+  const url = `http://${advertisedHost}:${actualPort}`
 
   if (options?.openWindow) {
     launchStandaloneDesktopWindow(url, false)
