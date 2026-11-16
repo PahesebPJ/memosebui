@@ -27,3 +27,14 @@ memosebui ui
 # Consultar estado y conexión con vault.sqlite
 memosebui status
 ```
+
+## 🔒 Seguridad de la API local
+
+El daemon escucha solo en `127.0.0.1:4322` y atiende únicamente al propio visor (mismo origen) y al CLI. Así, ninguna web abierta en el navegador puede leer la bóveda ni inyectar memorias:
+
+- Se rechazan con `403` las peticiones con un `Host` ajeno (DNS rebinding), con un `Origin` de otro sitio o `null`, o con `Sec-Fetch-Site: cross-site`/`same-site`.
+  La única excepción es abrir el visor (`GET /`) desde un enlace de otra web; la API sigue rechazando esas peticiones.
+- No se envían cabeceras CORS y los preflight (`OPTIONS`) devuelven `405`.
+- `POST` y `PUT` exigen `Content-Type: application/json` (si no, `415`) y un cuerpo de 1 MB como máximo (si no, `413`).
+
+Si integras otra herramienta con la API, llámala desde un proceso local (sin cabecera `Origin`) y envía JSON.
