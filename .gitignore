@@ -16,3 +16,8 @@ Thumbs.db
 *.log
 .env
 .env.local
+
+# Desktop sidecar build outputs
+build/
+src-tauri/binaries/
+src-tauri/gen/

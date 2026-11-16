@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, existsSync, readFileSync, statSync } from 'node:fs'
 import http from 'node:http'
+import sea from 'node:sea'
 import path from 'node:path'
 import { buildMindGraph } from '../core/graph-builder.ts'
 import { isMemoryCategory, VaultBridge } from '../core/vault-bridge.ts'
@@ -1444,6 +1445,16 @@ function sendJson(
   res.end(JSON.stringify(payload))
 }
 
+/** Must match the asset key in scripts/build-sidecar.mjs. */
+export const SEA_STYLESHEET_ASSET = 'mind.css'
+
+// Inside a Node SEA binary there is no package directory on disk, so the stylesheet ships as an
+// embedded asset instead.
+function loadMindStylesheet(cssPath: string): string {
+  if (sea.isSea()) return sea.getAsset(SEA_STYLESHEET_ASSET, 'utf8')
+  return existsSync(cssPath) ? readFileSync(cssPath, 'utf8') : ''
+}
+
 export async function startUiServer(
   options?: UiServerOptions
 ): Promise<UiServerInstance> {
@@ -1532,7 +1543,7 @@ export async function startUiServer(
       }
 
       if (method === 'GET' && pathname === '/styles/mind.css') {
-        const css = existsSync(cssPath) ? readFileSync(cssPath, 'utf8') : ''
+        const css = loadMindStylesheet(cssPath)
         res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' })
         res.end(css)
         return

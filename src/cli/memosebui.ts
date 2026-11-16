@@ -14,6 +14,7 @@ import {
   startUiServer,
 } from './ui-server.ts'
 import { BUNDLE_ID, VERSION } from '../version.ts'
+import { runSidecar } from './sidecar.ts'
 
 function printHelp(): void {
   console.log(`
@@ -37,6 +38,10 @@ Uso:
 
   memosebui purge
       Detiene el daemon de memosebui y lo elimina de la topología de hubseb.
+
+  memosebui sidecar
+      Modo interno de la app de escritorio: puerto efímero en 127.0.0.1, una línea JSON "ready"
+      por stdout y salida al cerrarse stdin.
 
   memosebui --version, -v
       Muestra la versión de memosebui.
@@ -141,6 +146,15 @@ async function main(): Promise<void> {
 
   if (firstArg === '--version' || firstArg === '-v' || firstArg === 'version') {
     console.log(`${BUNDLE_ID} v${VERSION}`)
+    return
+  }
+
+  if (firstArg === 'sidecar') {
+    await runSidecar({
+      serverOptions: { initialProject },
+      onShutdown: () => process.exit(0),
+      signals: ['SIGINT', 'SIGTERM'],
+    })
     return
   }
 
