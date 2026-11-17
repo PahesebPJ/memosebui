@@ -1,6 +1,6 @@
 [package]
 name = "memosebui-desktop"
-version = "0.1.1"
+version = "0.2.0"
 description = "Native desktop shell for memosebui (Tauri 2 + Node SEA sidecar)"
 authors = ["PahesebPJ"]
 edition = "2021"
