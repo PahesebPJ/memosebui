@@ -5,5 +5,5 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export const BUNDLE_ID = 'memosebui'
-export const VERSION = '0.1.1'
+export const VERSION = '0.2.0'
 export const PACKAGE_ROOT = path.resolve(__dirname, '..')
